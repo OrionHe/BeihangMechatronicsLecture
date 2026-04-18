@@ -24,7 +24,7 @@
 extern osThreadId_t defaultTaskHandle;
 extern osThreadId_t debugTaskHandle;
 extern osThreadId_t keyScanTaskHandle;
-
+extern osThreadId_t usbRxTaskHandle;
 /* ------------------------------ Typedef ------------------------------ */
 
 /* ------------------------------ Class ------------------------------ */

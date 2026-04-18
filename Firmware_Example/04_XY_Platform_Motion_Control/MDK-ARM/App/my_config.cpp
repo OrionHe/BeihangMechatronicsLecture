@@ -52,7 +52,4 @@ xy_platform::XYplatform g_xyPlatform(&g_linearModule[0], &g_linearModule[1],
                                      100.0f, 2.0f, 0.0f, 0.0f, 0.01f);
 
 
-uint8_t flag_usb = 0;
-uint32_t Len_usb = 0;  
-uint8_t Buffer_usb[512] = {0};
 /* ------------------------------ Functions ------------------------------ */

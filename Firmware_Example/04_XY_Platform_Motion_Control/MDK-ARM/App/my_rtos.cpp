@@ -15,7 +15,8 @@
 
 #include "my_rtos.h"
 #include "my_config.h"
-
+#include "xusb.h"
+#include "usb_device.h"
 /* ------------------------------ Defines ------------------------------ */
 
 /* ------------------------------ Variables ------------------------------ */
@@ -31,7 +32,7 @@ void My_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim);
 void StartDefaultTask(void *argument);
 void StartDebugTask(void *argument);
 void StartKeyScanTask(void *argument);
-
+void StartUsbRxTask(void *argument);
 #ifdef __cplusplus
 }
 #endif
@@ -62,6 +63,7 @@ void My_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   */
 void StartDefaultTask(void *argument)
 {
+  MX_USB_DEVICE_Init();
   g_xyPlatform.MotionConfig(1, 1, 10.0f, 500.0f);
   g_xyPlatform.x->SetMode(x_linear_module::MODULE_MODE_VELOCIY);
   g_xyPlatform.y->SetMode(x_linear_module::MODULE_MODE_VELOCIY);
@@ -122,4 +124,22 @@ void StartKeyScanTask(void *argument)
   }
 }
 
-
+void StartUsbRxTask(void *argument)
+{
+  uint8_t cmd;
+  uint8_t *data;
+  uint8_t data_len;
+  for (;;)
+  {
+    if (flag_usb)
+    {
+      // Process USB received data
+      if(usb_parse_command(Buffer_usb, Len_usb, &cmd, &data, &data_len))
+      {
+        usb_handle_command(cmd, data, data_len);
+      }
+      flag_usb = 0;
+    }
+    osDelay(10);
+  }
+}
