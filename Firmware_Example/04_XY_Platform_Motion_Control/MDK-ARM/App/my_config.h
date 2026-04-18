@@ -27,6 +27,9 @@ extern xkey::Key g_key[4];
 extern x_linear_module::LinearModule g_linearModule[2];
 extern xy_platform::XYplatform g_xyPlatform;
 
+extern uint8_t flag_usb;
+extern uint32_t Len_usb;  
+extern uint8_t Buffer_usb[512];
 /* ------------------------------ Typedef ------------------------------ */
 
 /* ------------------------------ Class ------------------------------ */

@@ -84,19 +84,22 @@ void StartDebugTask(void *argument)
   { 
     if (g_key[0].released())
     {
-      g_linearModule[0].SetTargetVelocityHard(10.0f);
+//      g_linearModule[0].SetTargetVelocity(-10.0f);
+        g_xyPlatform.FindHome();
     }
     if (g_key[1].released())
     {
-      g_linearModule[1].SetTargetVelocityHard(10.0f);
+//      g_linearModule[1].SetTargetVelocity(-10.0f);
+      g_linearModule[0].SetTargetVelocityHard(0.0f);
+      g_linearModule[1].SetTargetVelocityHard(0.0f);
     }
     if (g_key[2].released())
     {
-      g_linearModule[0].SetTargetVelocityHard(-10.0f);
+      g_linearModule[0].SetTargetVelocity(10.0f);
     }
     if (g_key[3].released())
     {
-      g_linearModule[1].SetTargetVelocityHard(-10.0f);
+      g_linearModule[1].SetTargetVelocity(10.0f);
     }
     osDelay(10);
   }

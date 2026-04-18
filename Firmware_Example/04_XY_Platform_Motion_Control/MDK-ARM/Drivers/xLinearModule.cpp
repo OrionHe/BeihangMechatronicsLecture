@@ -14,6 +14,7 @@
 /* ------------------------------ Includes ------------------------------ */
 
 #include "xLinearModule.h"
+#include "main.h"
 
 /* ------------------------------ Defines ------------------------------ */
 
@@ -96,6 +97,7 @@ namespace x_linear_module
     // 限位检测
     if (HAL_GPIO_ReadPin(this->limit_switch1_port, this->limit_switch1_pin) == GPIO_PIN_SET)
     {
+      HAL_GPIO_TogglePin(LED1_GPIO_Port,LED1_Pin);
       if (this->mode != MODULE_MODE_POSITION)
       {
         this->SetMode(MODULE_MODE_POSITION);
@@ -106,6 +108,7 @@ namespace x_linear_module
     }
     else if (HAL_GPIO_ReadPin(this->limit_switch2_port, this->limit_switch2_pin) == GPIO_PIN_SET)
     {
+      HAL_GPIO_TogglePin(LED2_GPIO_Port,LED2_Pin);
       this->SetMode(MODULE_MODE_ERROR);
       this->SetTargetVelocityHard(0);
     }
