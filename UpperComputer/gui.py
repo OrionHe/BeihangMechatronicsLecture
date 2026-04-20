@@ -30,6 +30,8 @@ from usb_comm import USBCommunicator
 
 logger = logging.getLogger(__name__)
 
+STATUS_QUERY_INTERVAL_MS = 50
+
 
 class SignalEmitter(QObject):
     """信号发射器（用于线程安全的 UI 更新）"""
@@ -443,8 +445,8 @@ class MainWindow(QMainWindow):
         
         layout.addWidget(QLabel("速度:"), 3, 0)
         self.abs_speed_input = QSpinBox()
-        self.abs_speed_input.setRange(0, 50000)
-        self.abs_speed_input.setValue(5000)
+        self.abs_speed_input.setRange(0, 10)
+        self.abs_speed_input.setValue(10)
         layout.addWidget(self.abs_speed_input, 3, 1, 1, 3)
         
         move_abs_btn = QPushButton("移动到点")
@@ -466,8 +468,8 @@ class MainWindow(QMainWindow):
         
         layout.addWidget(QLabel("速度:"), 8, 0)
         self.rel_speed_input = QSpinBox()
-        self.rel_speed_input.setRange(0, 50000)
-        self.rel_speed_input.setValue(5000)
+        self.rel_speed_input.setRange(0, 10)
+        self.rel_speed_input.setValue(10)
         layout.addWidget(self.rel_speed_input, 8, 1, 1, 3)
         
         move_rel_btn = QPushButton("相对移动")
@@ -500,8 +502,8 @@ class MainWindow(QMainWindow):
         
         layout.addWidget(QLabel("速度:"), 2, 0)
         self.line_speed_input = QSpinBox()
-        self.line_speed_input.setRange(0, 50000)
-        self.line_speed_input.setValue(5000)
+        self.line_speed_input.setRange(0, 10)
+        self.line_speed_input.setValue(10)
         layout.addWidget(self.line_speed_input, 2, 1, 1, 3)
         
         line_btn = QPushButton("执行直线插补")
@@ -538,8 +540,8 @@ class MainWindow(QMainWindow):
         
         layout.addWidget(QLabel("速度:"), 2, 0)
         self.arc_speed_input = QSpinBox()
-        self.arc_speed_input.setRange(0, 50000)
-        self.arc_speed_input.setValue(5000)
+        self.arc_speed_input.setRange(0, 10)
+        self.arc_speed_input.setValue(10)
         layout.addWidget(self.arc_speed_input, 2, 1, 1, 3)
         
         arc_btn = QPushButton("执行圆弧插补")
@@ -585,7 +587,7 @@ class MainWindow(QMainWindow):
         query_btn.clicked.connect(self.on_query_status)
         button_layout.addWidget(query_btn)
         
-        self.auto_query_check = QCheckBox("自动查询 (0.5s)")
+        self.auto_query_check = QCheckBox("自动查询 (0.2s)")
         self.auto_query_check.toggled.connect(self.on_auto_query_toggled)
         button_layout.addWidget(self.auto_query_check)
         
@@ -640,7 +642,7 @@ class MainWindow(QMainWindow):
                 
                 # 启动自动查询（如果勾选）
                 if self.auto_query_check.isChecked():
-                    self.status_timer.start(500)
+                    self.status_timer.start(STATUS_QUERY_INTERVAL_MS)
             else:
                 QMessageBox.critical(self, "错误", "连接失败")
     
@@ -737,7 +739,7 @@ class MainWindow(QMainWindow):
     def on_auto_query_toggled(self, checked: bool):
         """自动查询勾选"""
         if checked and self.comm.is_connected():
-            self.status_timer.start(500)
+            self.status_timer.start(STATUS_QUERY_INTERVAL_MS)
         else:
             self.status_timer.stop()
     

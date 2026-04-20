@@ -16,11 +16,13 @@
 #include "XYplatform.h"
 #include "arm_math.h"
 #include "xLinearModule.h"
+#include <math.h>
 
 /* ------------------------------ Defines ------------------------------ */
 
 #define abs(x) ((x) > 0 ? (x) : -(x))
 #define POSITION_ERROR_THRESHOLD 1e-2f
+#define DEG_TO_RAD 0.01745329251994329577f
 
 /* ------------------------------ variables ------------------------------ */
 
@@ -63,19 +65,32 @@ void XYplatform::FindHome(void) {
 }
 
 void XYplatform::MoveTo(float x, float y) {
-  // 请完成此函数
+  this->MoveTo(x, y, this->max_vel);
+}
+
+void XYplatform::MoveTo(float x, float y, float vel) {
   // 设置模式为手动模式
   this->mode = PLATFORM_MODE_MANUAL;
-  // 计算x和y的速度
-  float vel_x =
-      abs(x - this->x_real) > abs(y - this->y_real)
-          ? this->max_vel
-          : this->max_vel * (x - this->x_real) / abs(y - this->y_real);
-  float vel_y = abs(x - this->x_real) > abs(y - this->y_real)
-                    ? this->max_vel * (y - this->y_real) / abs(x - this->x_real)
-                    : this->max_vel;
-  vel_x = x - this->x_real > 0 ? vel_x : -vel_x;
-  vel_y = y - this->y_real > 0 ? vel_y : -vel_y;
+
+  // 在位置模式下，底层会根据目标位置自动决定方向，这里只传速度幅值。
+  float dx = x - this->x_real;
+  float dy = y - this->y_real;
+  float abs_dx = abs(dx);
+  float abs_dy = abs(dy);
+  float max_delta = abs_dx > abs_dy ? abs_dx : abs_dy;
+
+  float speed = abs(vel);
+  if (speed > this->max_vel) {
+    speed = this->max_vel;
+  }
+
+  float vel_x = 0.0f;
+  float vel_y = 0.0f;
+  if (max_delta > 0.0f) {
+    vel_x = speed * abs_dx / max_delta;
+    vel_y = speed * abs_dy / max_delta;
+  }
+
   // 设置x和y目标位置
   this->x->SetMode(x_linear_module::MODULE_MODE_POSITION);
   this->y->SetMode(x_linear_module::MODULE_MODE_POSITION);
@@ -83,49 +98,79 @@ void XYplatform::MoveTo(float x, float y) {
   this->y->SetTargetPositionWithVelocity(y, vel_y);
 }
 
-void XYplatform::LinearInterpolation(float x, float y, float vel, float step) {
-  // 请完成此函数
-  // 设置模式为线性插补模式
-  this->mode = PLATFORM_MODE_LINEAR_INTERPOLATION;
-  // 记录插补起始位置
-  this->x_interpolation_start = this->x_real;
-  this->y_interpolation_start = this->y_real;
-  this->x_interpolation_target = this->x_real;
-  this->y_interpolation_target = this->y_real;
-  // 设置插补目标位置
-  this->x_target = x;
-  this->y_target = y;
-  // 设置插补速度
-  this->inter_vel = vel;
-  // 设置插补步长
-  this->inter_step = step;
+void XYplatform::MoveRelative(float dx, float dy, float vel) {
+  float current_x = this->x->GetPosition();
+  float current_y = this->y->GetPosition();
+  this->MoveTo(current_x + dx, current_y + dy, vel);
+}
 
-  this->x->SetMode(x_linear_module::MODULE_MODE_POSITION);
-  this->y->SetMode(x_linear_module::MODULE_MODE_POSITION);
+void XYplatform::LinearInterpolation(float x, float y, float vel, float step) {
+  // 从当前位置开始线性插补
+  this->LinearInterpolation(this->x_real, this->y_real, x, y, vel, step);
+}
+
+void XYplatform::LinearInterpolation(float x_start, float y_start, float x,
+                                     float y, float vel, float step) {
+  // 先moveto到起始点
+  this->MoveTo(x_start, y_start, vel);
+  
+  // 设置最终目标位置
+  this->interp_final_x = x;
+  this->interp_final_y = y;
+  
+  // 设置插补参数
+  this->inter_vel = vel;
+  this->inter_step = abs(step);
+  
+  // 设置插补起始位置为起点
+  this->x_interpolation_start = x_start;
+  this->y_interpolation_start = y_start;
+  this->x_interpolation_target = x_start;
+  this->y_interpolation_target = y_start;
+  
+  // 标记正在等待到达起始点
+  this->interp_waiting_start = true;
 }
 
 void XYplatform::CircularInterpolation(float center_x, float center_y,
                                        float radius, float vel, float angle,
                                        bool clockwise, float step) {
-  // 请完成此函数
-  // 设置模式为圆弧插补模式
-  this->mode = PLATFORM_MODE_CIRCULAR_INTERPOLATION;
+  // 先moveto到起始点（当前位置）
+  this->MoveTo(this->x_real, this->y_real, vel);
+  
+  // 记录圆弧参数
+  this->x_center = center_x;
+  this->y_center = center_y;
+  this->radius = radius;
+  this->clockwise = clockwise;
+  
+  // 计算圆弧角度
+  float start_angle = atan2f(this->y_real - center_y, this->x_real - center_x);
+  this->arc_start_angle = start_angle;
+  float sweep_angle = abs(angle) * DEG_TO_RAD;
+  this->arc_target_angle = start_angle + (clockwise ? -sweep_angle : sweep_angle);
+  this->arc_current_angle = start_angle;
+  
   // 记录插补起始位置
   this->x_interpolation_start = this->x_real;
   this->y_interpolation_start = this->y_real;
   this->x_interpolation_target = this->x_real;
   this->y_interpolation_target = this->y_real;
-  // 设置插补目标位置
-  this->x_target = center_x + radius * arm_cos_f32(angle);
-  this->y_target = center_y + radius * arm_sin_f32(angle);
+  
+  // 设置最终目标位置
+  this->x_target = center_x + radius * cosf(this->arc_target_angle);
+  this->y_target = center_y + radius * sinf(this->arc_target_angle);
+  
+  // 设置插补参数
+  this->inter_vel = vel;
+  this->inter_step = abs(step);
+  
+  // 标记正在等待到达圆弧插补起始点
+  this->arc_waiting_start = true;
   // 设置插补速度
   this->inter_vel = vel;
   // 设置插补步长
-  this->inter_vel = step;
-  // 设置圆弧插补方向
-  this->clockwise = clockwise;
-  // 设置圆弧插补半径
-  this->radius = radius;
+  this->inter_step = abs(step);
 
   this->x->SetMode(x_linear_module::MODULE_MODE_POSITION);
   this->y->SetMode(x_linear_module::MODULE_MODE_POSITION);
@@ -152,6 +197,28 @@ void XYplatform::ControlLoop(void) {
   // 根据模式进行不同的控制
   if (this->mode == PLATFORM_MODE_IDLE) {
   } else if (this->mode == PLATFORM_MODE_MANUAL) {
+    // 检查是否在等待线性插补启动
+    if (this->interp_waiting_start) {
+      // 检查是否已到达起始点
+      if (abs(this->x_real - this->x_interpolation_start) <= POSITION_ERROR_THRESHOLD &&
+          abs(this->y_real - this->y_interpolation_start) <= POSITION_ERROR_THRESHOLD) {
+        // 已到达起始点，切换到线性插补模式
+        this->mode = PLATFORM_MODE_LINEAR_INTERPOLATION;
+        this->x_target = this->interp_final_x;
+        this->y_target = this->interp_final_y;
+        this->interp_waiting_start = false;
+      }
+    }
+    // 检查是否在等待圆弧插补启动
+    else if (this->arc_waiting_start) {
+      // 检查是否已到达起始点
+      if (abs(this->x_real - this->x_interpolation_start) <= POSITION_ERROR_THRESHOLD &&
+          abs(this->y_real - this->y_interpolation_start) <= POSITION_ERROR_THRESHOLD) {
+        // 已到达起始点，切换到圆弧插补模式
+        this->mode = PLATFORM_MODE_CIRCULAR_INTERPOLATION;
+        this->arc_waiting_start = false;
+      }
+    }
   } else if (this->mode == PLATFORM_MODE_FIND_HOME) {
     if (abs(this->x_real) <= POSITION_ERROR_THRESHOLD &&
         abs(this->y_real) <= POSITION_ERROR_THRESHOLD) {
@@ -259,6 +326,32 @@ void XYplatform::ControlLoop(void) {
     this->y->SetTargetPositionWithVelocity(this->y_interpolation_target,
                                            this->inter_vel);
   } else if (this->mode == PLATFORM_MODE_CIRCULAR_INTERPOLATION) {
+    // 检查是否到达目标位置
+    if (abs(this->x_real - this->x_target) <= POSITION_ERROR_THRESHOLD &&
+        abs(this->y_real - this->y_target) <= POSITION_ERROR_THRESHOLD) {
+      this->mode = PLATFORM_MODE_MANUAL;
+    } else {
+      if (this->radius > 0.0f && this->inter_step > 0.0f) {
+        float step_angle = this->inter_step / this->radius;
+        float next_angle = this->arc_current_angle +
+                           (this->clockwise ? -step_angle : step_angle);
+        if ((!this->clockwise && next_angle > this->arc_target_angle) ||
+            (this->clockwise && next_angle < this->arc_target_angle)) {
+          next_angle = this->arc_target_angle;
+        }
+        this->arc_current_angle = next_angle;
+        this->x_interpolation_target =
+          this->x_center + this->radius * cosf(this->arc_current_angle);
+        this->y_interpolation_target =
+          this->y_center + this->radius * sinf(this->arc_current_angle);
+      }
+
+      // 设定插补目标位置
+      this->x->SetTargetPositionWithVelocity(this->x_interpolation_target,
+                                             this->inter_vel);
+      this->y->SetTargetPositionWithVelocity(this->y_interpolation_target,
+                                             this->inter_vel);
+    }
   } else if (this->mode == PLATFORM_MODE_CLOSED_LOOP) {
     // 判断是否到达目标位置
     if (abs(this->x_real - this->x_target) <= POSITION_ERROR_THRESHOLD &&
@@ -280,5 +373,41 @@ void XYplatform::ControlLoop(void) {
   }
 
   // 请完成此函数 End
+}
+
+void XYplatform::Stop(void) {
+  this->mode = PLATFORM_MODE_IDLE;
+  this->x->SetTargetVelocityHard(0.0f);
+  this->y->SetTargetVelocityHard(0.0f);
+  this->x->SetMode(x_linear_module::MODULE_MODE_IDLE);
+  this->y->SetMode(x_linear_module::MODULE_MODE_IDLE);
+  this->pos_pid_x.integral = 0;
+  this->pos_pid_y.integral = 0;
+}
+
+void XYplatform::GetStatus(float *curr_x, float *curr_y, uint8_t *status) {
+  if (curr_x != nullptr) {
+    *curr_x = this->x->GetPosition();
+    // *curr_x = this->x_real;
+  }
+  if (curr_y != nullptr) {
+    *curr_y = this->y->GetPosition();
+    // *curr_y = this->y_real;
+  }
+
+  if (status != nullptr) {
+    if (this->x->mode == x_linear_module::MODULE_MODE_ERROR ||
+        this->y->mode == x_linear_module::MODULE_MODE_ERROR) {
+      *status = 0xFF;
+    } else if (this->mode == PLATFORM_MODE_FIND_HOME) {
+      *status = 0x01;
+    } else if (this->mode == PLATFORM_MODE_LINEAR_INTERPOLATION ||
+               this->mode == PLATFORM_MODE_CIRCULAR_INTERPOLATION ||
+               this->mode == PLATFORM_MODE_CLOSED_LOOP) {
+      *status = 0x02;
+    } else {
+      *status = 0x00;
+    }
+  }
 }
 } // namespace xy_platform

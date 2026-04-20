@@ -84,26 +84,27 @@ void StartDebugTask(void *argument)
 {
   for (;;)
   { 
-    if (g_key[0].released())
-    {
-//      g_linearModule[0].SetTargetVelocity(-10.0f);
-        g_xyPlatform.FindHome();
-    }
-    if (g_key[1].released())
-    {
-//      g_linearModule[1].SetTargetVelocity(-10.0f);
-      g_linearModule[0].SetTargetVelocityHard(0.0f);
-      g_linearModule[1].SetTargetVelocityHard(0.0f);
-    }
-    if (g_key[2].released())
-    {
-      g_linearModule[0].SetTargetVelocity(10.0f);
-    }
-    if (g_key[3].released())
-    {
-      g_linearModule[1].SetTargetVelocity(10.0f);
-    }
-    osDelay(10);
+//     if (g_key[0].released())
+//     {
+// //      g_linearModule[0].SetTargetVelocity(-10.0f);
+//         g_xyPlatform.FindHome();
+//     }
+//     if (g_key[1].released())
+//     {
+// //      g_linearModule[1].SetTargetVelocity(-10.0f);
+//       g_linearModule[0].SetTargetVelocityHard(0.0f);
+//       g_linearModule[1].SetTargetVelocityHard(0.0f);
+//     }
+//     if (g_key[2].released())
+//     {
+//       g_linearModule[0].SetTargetVelocity(10.0f);
+//     }
+//     if (g_key[3].released())
+//     {
+//       g_linearModule[1].SetTargetVelocity(10.0f);
+//     }
+    g_xyPlatform.ControlLoop();
+    osDelay(1);
   }
 }
 
@@ -131,7 +132,7 @@ void StartUsbRxTask(void *argument)
   uint8_t data_len;
   for (;;)
   {
-    if (flag_usb)
+    if (flag_usb) //可能会错过一些消息，但简单起见先这样实现，后续可以改成消息队列或者信号量
     {
       // Process USB received data
       if(usb_parse_command(Buffer_usb, Len_usb, &cmd, &data, &data_len))

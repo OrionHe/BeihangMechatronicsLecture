@@ -15,6 +15,7 @@
 
 /* ------------------------------ Includes ------------------------------ */
 
+#include <stdint.h>
 #include "xLinearModule.h"
 #include "pid.h"
 
@@ -51,10 +52,17 @@ public:
   float x_vel, y_vel;         // 当前速度，单位mm/s
   float inter_vel;            // 当前插补速度，单位mm/s
   float inter_step = 0.1f;    // 当前插补步长，单位mm
+  /* 线性插补预启动状态 */
+  bool interp_waiting_start = false; // 是否正在等待到达插补起始点
+  float interp_final_x, interp_final_y; // 线性插补的最终目标位置
   /* 圆弧插补参数 */
+  bool arc_waiting_start = false; // 是否正在等待到达圆弧插补起始点
   float x_center, y_center; // 当前圆弧插补圆心，单位mm
   float radius;             // 当前圆弧插补半径，单位mm
   bool clockwise;           // 当前圆弧插补方向
+  float arc_start_angle;    // 圆弧起始角，单位rad
+  float arc_target_angle;   // 圆弧目标角，单位rad
+  float arc_current_angle;  // 圆弧当前插补角，单位rad
 
   // pid 控制器
   Pid pos_pid_x;
@@ -101,6 +109,24 @@ public:
   void MoveTo(float x, float y);
 
   /**
+   * @brief  直线运动到目标位置
+   * @param  x: X轴目标位置，单位mm
+   * @param  y: Y轴目标位置，单位mm
+   * @param  vel: 运动速度，单位mm/s
+   * @retval none
+   */
+  void MoveTo(float x, float y, float vel);
+
+  /**
+   * @brief  相对当前位置运动
+   * @param  dx: X轴位移，单位mm
+   * @param  dy: Y轴位移，单位mm
+   * @param  vel: 运动速度，单位mm/s
+   * @retval none
+   */
+  void MoveRelative(float dx, float dy, float vel);
+
+  /**
    * @brief
    * 通过直线插补运动到目标位置，运动到目标位置后速度为0mm/s，模式为PLATFORM_MODE_MANUAL，路径是精确直线（误差为插值步长）
    * @author Xiang Guo
@@ -111,6 +137,21 @@ public:
    * @retval none
    */
   void LinearInterpolation(float x, float y, float vel, float step);
+
+  /**
+   * @brief
+   * 从指定起点通过直线插补运动到目标位置，先moveto到起点，再进行插补。运动到目标位置后速度为0mm/s，路径是精确直线
+   * @author Xiang Guo
+   * @param  x_start: X轴起始位置，单位mm
+   * @param  y_start: Y轴起始位置，单位mm
+   * @param  x: X轴目标位置，单位mm
+   * @param  y: Y轴目标位置，单位mm
+   * @param  vel: 插补速度，单位mm/s
+   * @param  step: 插补步长，单位mm
+   * @retval none
+   */
+  void LinearInterpolation(float x_start, float y_start, float x, float y,
+                           float vel, float step);
 
   /**
    * @brief
@@ -145,6 +186,21 @@ public:
    * @retval none
    */
   void ControlLoop(void);
+
+  /**
+   * @brief  停止XY平台运动
+   * @retval none
+   */
+  void Stop(void);
+
+  /**
+   * @brief  获取当前X/Y位置和平台状态
+   * @param  curr_x: 当前X轴位置，单位mm
+   * @param  curr_y: 当前Y轴位置，单位mm
+   * @param  status: 平台状态，0=idle, 1=homing, 2=moving, 0xFF=error
+   * @retval none
+   */
+  void GetStatus(float *curr_x, float *curr_y, uint8_t *status);
 };
 
 } // namespace xy_platform

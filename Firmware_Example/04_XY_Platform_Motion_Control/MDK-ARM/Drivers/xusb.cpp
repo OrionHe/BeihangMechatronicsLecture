@@ -1,6 +1,7 @@
 #include "xusb.h"
 #include "main.h"
 #include "my_config.h"
+#include "usbd_cdc_if.h"
 
 uint8_t flag_usb = 0;
 uint32_t Len_usb = 0;  
@@ -47,6 +48,7 @@ void usb_send_response(uint8_t cmd, const uint8_t *data, uint8_t data_len)
     tx_buf[idx++] = checksum;
     tx_buf[idx++] = FRAME_TAIL;
     
+    CDC_Transmit_FS(tx_buf, idx);
     /* 外部调用：CDC_Transmit_FS(tx_buf, idx); */
 }
 
@@ -105,7 +107,7 @@ void usb_handle_command(uint8_t cmd, uint8_t *data, uint8_t data_len)
                 memcpy(&x, &data[0], 4);
                 memcpy(&y, &data[4], 4);
                 memcpy(&speed_int, &data[8], 2);
-                // xy_platform_move_abs(x, y, speed_int);
+                g_xyPlatform.MoveTo(x, y, (float)speed_int);
             }
             break;
         
@@ -115,7 +117,7 @@ void usb_handle_command(uint8_t cmd, uint8_t *data, uint8_t data_len)
                 memcpy(&dx, &data[0], 4);
                 memcpy(&dy, &data[4], 4);
                 memcpy(&speed_int, &data[8], 2);
-                // xy_platform_move_rel(dx, dy, speed_int);
+                g_xyPlatform.MoveRelative(dx, dy, (float)speed_int);
             }
             break;
         
@@ -128,7 +130,9 @@ void usb_handle_command(uint8_t cmd, uint8_t *data, uint8_t data_len)
                 memcpy(&x2, &data[8], 4);
                 memcpy(&y2, &data[12], 4);
                 memcpy(&speed_int, &data[16], 2);
-                // xy_platform_line_interp(x1, y1, x2, y2, speed_int);
+                g_xyPlatform.LinearInterpolation(x1, y1, x2, y2,
+                                                 (float)speed_int,
+                                                 g_xyPlatform.inter_step);
             }
             break;
         
@@ -141,30 +145,32 @@ void usb_handle_command(uint8_t cmd, uint8_t *data, uint8_t data_len)
                 memcpy(&radius, &data[8], 4);
                 memcpy(&angle, &data[12], 4);
                 memcpy(&speed_int, &data[16], 2);
-                // xy_platform_arc_interp(xc, yc, radius, angle, speed_int);
+                g_xyPlatform.CircularInterpolation(xc, yc, radius,
+                                                   (float)speed_int, angle,
+                                                   angle < 0.0f,
+                                                   g_xyPlatform.inter_step);
             }
             break;
         
         case CMD_STOP:
             /* 停止 */
-            // xy_platform_stop();
+            g_xyPlatform.Stop();
             break;
         
         case CMD_QUERY_STATUS:
             /* 查询状态：需要回复 STATUS_RESPONSE */
             {
                 float curr_x = 0, curr_y = 0;
-                uint8_t status = 0, error = 0;
+                uint8_t status = 0;
                 
-                /* 获取当前状态（用户实现） */
-                // xy_platform_get_status(&curr_x, &curr_y, &status, &error);
+                g_xyPlatform.GetStatus(&curr_x, &curr_y, &status);
                 
                 /* 打包响应 */
                 uint8_t response[10];
                 memcpy(&response[0], &curr_x, 4);
                 memcpy(&response[4], &curr_y, 4);
                 response[8] = status;
-                response[9] = error;
+                response[9] = 0;
                 
                 usb_send_response(CMD_STATUS_RESPONSE, response, 10);
             }
