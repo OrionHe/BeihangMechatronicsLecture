@@ -88,9 +88,7 @@ void XYplatform::MoveTo(float x, float y, float vel) {
   float max_delta = abs_dx > abs_dy ? abs_dx : abs_dy;
 
   float speed = abs(vel);
-  if (speed > this->max_vel) {
-    speed = this->max_vel;
-  }
+
 
   float vel_x = 0.0f;
   float vel_y = 0.0f;
