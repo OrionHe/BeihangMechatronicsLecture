@@ -31,7 +31,7 @@ namespace x_linear_module
   typedef enum
   {
     MODULE_MODE_IDLE,
-    MODULE_MODE_VELOCIY,
+    MODULE_MODE_VELOCITY,
     MODULE_MODE_POSITION,
     MODULE_MODE_ERROR,
   } ModuleMode_t;

@@ -17,6 +17,7 @@
 #include "my_config.h"
 #include "xusb.h"
 #include "usb_device.h"
+#include "usbd_cdc_if.h"
 /* ------------------------------ Defines ------------------------------ */
 
 /* ------------------------------ Variables ------------------------------ */
@@ -65,8 +66,8 @@ void StartDefaultTask(void *argument)
 {
   MX_USB_DEVICE_Init();
   g_xyPlatform.MotionConfig(1, 1, 10.0f, 500.0f);
-  g_xyPlatform.x->SetMode(x_linear_module::MODULE_MODE_VELOCIY);
-  g_xyPlatform.y->SetMode(x_linear_module::MODULE_MODE_VELOCIY);
+  g_xyPlatform.x->SetMode(x_linear_module::MODULE_MODE_VELOCITY);
+  g_xyPlatform.y->SetMode(x_linear_module::MODULE_MODE_VELOCITY);
   osThreadResume(debugTaskHandle);
   osThreadResume(keyScanTaskHandle);
   osThreadSuspend(defaultTaskHandle);
@@ -109,7 +110,7 @@ void StartDebugTask(void *argument)
 }
 
 /**
-  * @brief  按键扫描任务，50ms扫描一次按键，更新按键状态，按键按下时，更新按键状态为按下，按键释放时，更新按键状态为释放
+  * @brief  Key scan task, update key states every 50ms.
   * @param  none
   * @retval none
   */
@@ -127,20 +128,68 @@ void StartKeyScanTask(void *argument)
 
 void StartUsbRxTask(void *argument)
 {
-  uint8_t cmd;
-  uint8_t *data;
-  uint8_t data_len;
+  (void)argument;
+
+  uint8_t cmd = 0U;
+  uint8_t *data = nullptr;
+  uint8_t data_len = 0U;
+  uint8_t packet_buf[64];
+  uint32_t packet_len = 0U;
+  uint8_t stream_buf[512];
+  uint16_t stream_len = 0U;
+
   for (;;)
   {
-    if (flag_usb) //可能会错过一些消息，但简单起见先这样实现，后续可以改成消息队列或者信号量
+    (void)osThreadFlagsWait(USB_RX_THREAD_FLAG_DATA, osFlagsWaitAny, osWaitForever);
+
+    while (USB_CDC_RxPop(packet_buf, sizeof(packet_buf), &packet_len))
     {
-      // Process USB received data
-      if(usb_parse_command(Buffer_usb, Len_usb, &cmd, &data, &data_len))
+      if ((stream_len + packet_len) > sizeof(stream_buf))
       {
-        usb_handle_command(cmd, data, data_len);
+        stream_len = 0U;
       }
-      flag_usb = 0;
+
+      memcpy(&stream_buf[stream_len], packet_buf, packet_len);
+      stream_len += (uint16_t)packet_len;
+
+      uint16_t parse_pos = 0U;
+      while ((stream_len - parse_pos) >= 5U)
+      {
+        if (stream_buf[parse_pos] != FRAME_HEADER)
+        {
+          parse_pos++;
+          continue;
+        }
+
+        uint16_t frame_len = (uint16_t)stream_buf[parse_pos + 2U] + 5U;
+        if ((stream_len - parse_pos) < frame_len)
+        {
+          break;
+        }
+
+        if (stream_buf[parse_pos + frame_len - 1U] == FRAME_TAIL)
+        {
+          if (usb_parse_command(&stream_buf[parse_pos], frame_len, &cmd, &data, &data_len))
+          {
+            usb_handle_command(cmd, data, data_len);
+          }
+          parse_pos += frame_len;
+        }
+        else
+        {
+          parse_pos++;
+        }
+      }
+
+      if (parse_pos > 0U)
+      {
+        uint16_t remain = (uint16_t)(stream_len - parse_pos);
+        if (remain > 0U)
+        {
+          memmove(stream_buf, &stream_buf[parse_pos], remain);
+        }
+        stream_len = remain;
+      }
     }
-    osDelay(10);
   }
 }

@@ -4,6 +4,10 @@
 #include <stdint.h>
 #include <string.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* ===== 协议定义 ===== */
 
 #define FRAME_HEADER 0xAA
@@ -27,9 +31,8 @@ typedef enum {
     STATUS_ERROR   = 0xFF
 } PlatformStatus_t;
 
-extern uint8_t flag_usb;
-extern uint32_t Len_usb;  
-extern uint8_t Buffer_usb[512];
+#define USB_RX_THREAD_FLAG_DATA (1UL << 0)
+
 /* ===== 函数声明 ===== */
 void usb_send_response(uint8_t cmd, const uint8_t *data, uint8_t data_len);
 
@@ -38,5 +41,8 @@ int usb_parse_command(const uint8_t *frame, uint16_t frame_len,
 
 void usb_handle_command(uint8_t cmd, uint8_t *data, uint8_t data_len);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif

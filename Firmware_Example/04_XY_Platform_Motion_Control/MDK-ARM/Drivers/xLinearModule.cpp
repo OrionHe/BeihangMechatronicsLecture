@@ -57,7 +57,7 @@ namespace x_linear_module
       case MODULE_MODE_IDLE:
         this->stepper.SetMode(xstepper::STEPPER_MODE_IDLE);
         break;
-      case MODULE_MODE_VELOCIY:
+      case MODULE_MODE_VELOCITY:
         this->stepper.SetMode(xstepper::STEPPER_MODE_VELOCITY);
         break;
       case MODULE_MODE_POSITION:

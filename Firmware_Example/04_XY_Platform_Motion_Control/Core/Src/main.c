@@ -54,7 +54,6 @@ void SystemClock_Config(void);
 void MX_FREERTOS_Init(void);
 /* USER CODE BEGIN PFP */
 extern void My_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim);
-/* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */

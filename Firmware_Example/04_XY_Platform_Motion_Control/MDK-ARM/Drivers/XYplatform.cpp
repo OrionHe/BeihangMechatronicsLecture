@@ -66,8 +66,8 @@ void XYplatform::MotionConfig(int8_t x_dir, int8_t y_dir, float max_vel,float ac
 
 void XYplatform::FindHome(void) {
   this->mode = PLATFORM_MODE_FIND_HOME;
-  x->SetMode(x_linear_module::MODULE_MODE_VELOCIY);
-  y->SetMode(x_linear_module::MODULE_MODE_VELOCIY);
+  x->SetMode(x_linear_module::MODULE_MODE_VELOCITY);
+  y->SetMode(x_linear_module::MODULE_MODE_VELOCITY);
   x->SetTargetVelocity(-10.0f);
   y->SetTargetVelocity(-10.0f);
 }
@@ -174,8 +174,8 @@ void XYplatform::ClosedLoopControl(float x_pos_ref, float y_pos_ref) {
   this->x_target = x_pos_ref;
   this->y_target = y_pos_ref;
 
-  this->x->SetMode(x_linear_module::MODULE_MODE_VELOCIY);
-  this->y->SetMode(x_linear_module::MODULE_MODE_VELOCIY);
+  this->x->SetMode(x_linear_module::MODULE_MODE_VELOCITY);
+  this->y->SetMode(x_linear_module::MODULE_MODE_VELOCITY);
 }
 
 void XYplatform::ControlLoop(void) {

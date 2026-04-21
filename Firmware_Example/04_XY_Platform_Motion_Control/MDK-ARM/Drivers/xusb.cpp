@@ -3,9 +3,6 @@
 #include "my_config.h"
 #include "usbd_cdc_if.h"
 
-uint8_t flag_usb = 0;
-uint32_t Len_usb = 0;  
-uint8_t Buffer_usb[512] = {0};
 /**
  * @brief  校验和计算（XOR）
  */
@@ -55,6 +52,10 @@ void usb_send_response(uint8_t cmd, const uint8_t *data, uint8_t data_len)
 int usb_parse_command(const uint8_t *frame, uint16_t frame_len,
                       uint8_t *cmd, uint8_t **data, uint8_t *data_len)
 {
+    if ((frame == nullptr) || (cmd == nullptr) || (data == nullptr) || (data_len == nullptr)) {
+        return 0;
+    }
+
     if (frame_len < 5) return 0;
     
     if (frame[0] != FRAME_HEADER || frame[frame_len-1] != FRAME_TAIL) {
@@ -63,6 +64,9 @@ int usb_parse_command(const uint8_t *frame, uint16_t frame_len,
     
     *cmd = frame[1];
     *data_len = frame[2];
+    if (frame_len != (uint16_t)(*data_len) + 5U) {
+        return 0;
+    }
     *data = (uint8_t*)&frame[3];
     
     /* 校验校验和 */
