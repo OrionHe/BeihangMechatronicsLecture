@@ -68,13 +68,6 @@ const osThreadAttr_t keyScanTask_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityBelowNormal,
 };
-/* Definitions for usbRxTask */
-osThreadId_t usbRxTaskHandle;
-const osThreadAttr_t usbRxTask_attributes = {
-  .name = "usbRxTask",
-  .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
-};
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
@@ -84,7 +77,6 @@ const osThreadAttr_t usbRxTask_attributes = {
 void StartDefaultTask(void *argument);
 extern void StartDebugTask(void *argument);
 extern void StartKeyScanTask(void *argument);
-extern void StartUsbRxTask(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
@@ -123,9 +115,6 @@ void MX_FREERTOS_Init(void) {
 
   /* creation of keyScanTask */
   keyScanTaskHandle = osThreadNew(StartKeyScanTask, NULL, &keyScanTask_attributes);
-
-  /* creation of usbRxTask */
-  usbRxTaskHandle = osThreadNew(StartUsbRxTask, NULL, &usbRxTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
