@@ -36,9 +36,13 @@ typedef enum {
 } PlatformMode_t;
 class XYplatform {
 public:
+
+
+
   x_linear_module::LinearModule *x, *y;
   float max_vel; // 每个直线模组的最大速度，单位mm/s
-
+  float acc; // 每个直线模组的最大加速度，单位mm/s^2
+  int8_t x_dir, y_dir; // 每个直线模组的方向，1为正向，-1为反向
   // 请完成此类的成员变量 Start
 
   /* XY平台执行状态 */
@@ -48,35 +52,35 @@ public:
       y_interpolation_start; // 当前插补步起始位置，单位mm
   float x_interpolation_target,
       y_interpolation_target; // 当前插补步目标位置，单位mm
+  float x_interpolation_final, 
+      y_interpolation_final; // 插补的最终目标位置,单位mm
   float x_real, y_real;       // 当前实际位置，单位mm
   float x_vel, y_vel;         // 当前速度，单位mm/s
   float inter_vel;            // 当前插补速度，单位mm/s
-  float inter_step = 0.1f;    // 当前插补步长，单位mm
-  /* 线性插补预启动状态 */
-  bool interp_waiting_start = false; // 是否正在等待到达插补起始点
-  float interp_final_x, interp_final_y; // 线性插补的最终目标位置
-  /* 圆弧插补参数 */
-  bool arc_waiting_start = false; // 是否正在等待到达圆弧插补起始点
+  float inter_step;    // 插补步长，单位mm
+
+
+  bool linear_waiting_start = false; // 是否正在等待到达插补起始点
+  bool circular_waiting_start = false; // 是否正在等待到达圆弧插补起始点
   float x_center, y_center; // 当前圆弧插补圆心，单位mm
   float radius;             // 当前圆弧插补半径，单位mm
   bool clockwise;           // 当前圆弧插补方向
-  float arc_start_angle;    // 圆弧起始角，单位rad
-  float arc_target_angle;   // 圆弧目标角，单位rad
-  float arc_current_angle;  // 圆弧当前插补角，单位rad
+
 
   // pid 控制器
   Pid pos_pid_x;
   Pid pos_pid_y;
-
+  float pid_limit_output; // pid输出限幅，单位mm/s
   // 请完成此类的成员变量 End
 
   XYplatform(x_linear_module::LinearModule *x,
              x_linear_module::LinearModule *y,
-             float max_vel,
-             float pid_kp = 2.0f,
-             float pid_ki = 0.0f,
-             float pid_kd = 0.0f,
-             float pid_time_period_s = 0.01f);
+            float inter_step,
+            float pid_limit_output,
+            float pid_kp,
+            float pid_ki,
+            float pid_kd,
+            float pid_time_period_s);
 
   /**
    * @brief  设置XY平台运动参数
@@ -150,9 +154,7 @@ public:
    * @param  step: 插补步长，单位mm
    * @retval none
    */
-  void LinearInterpolation(float x_start, float y_start, float x, float y,
-                           float vel, float step);
-
+  void LinearInterpolation(float x_start, float y_start, float x, float y,float vel, float step);
   /**
    * @brief
    * 通过圆弧插补运动到目标位置，运动到目标位置后速度为0mm/s，模式为PLATFORM_MODE_MANUAL，路径是精确圆弧（误差为插值步长）
@@ -167,7 +169,7 @@ public:
    * @retval none
    */
   void CircularInterpolation(float center_x, float center_y, float radius,
-                             float vel, float angle, bool clockwise,
+                             float vel, float angle_start,float angle_end, bool clockwise,
                              float step);
 
   /**

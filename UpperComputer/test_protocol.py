@@ -65,8 +65,8 @@ def test_communication(port, baudrate=115200):
         time.sleep(0.5)
         
         # 测试 6: 圆弧插补
-        print("\n[*] 圆弧插补 (圆心 25,25, 半径 10, 角度 90°)...")
-        comm.send_data(CommandBuilder.arc_interp(25, 25, 10, 90, 5000))
+        print("\n[*] 圆弧插补 (圆心 25,25, 半径 10, 起始角 0°, 终止角 90°, 逆时针)...")
+        comm.send_data(CommandBuilder.arc_interp(25, 25, 10, 0, 90, False, 5000))
         time.sleep(0.5)
         
         # 测试 7: 停止

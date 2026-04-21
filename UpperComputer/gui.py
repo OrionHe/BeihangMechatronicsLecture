@@ -59,6 +59,8 @@ class XYPlotCanvas(FigureCanvas):
         # 初始化
         self.ax.set_xlim(-10, 110)
         self.ax.set_ylim(-10, 110)
+        # 强制 X/Y 等比例显示，避免窗口拉伸导致轨迹形变
+        self.ax.set_aspect('equal', adjustable='box')
         
         # 绘制工作区域边界
         self._draw_workspace()
@@ -160,11 +162,24 @@ class XYPlatformController:
             f"直线: ({x1:.1f}, {y1:.1f}) → ({x2:.1f}, {y2:.1f})"
         )
     
-    def arc_interp(self, xc: float, yc: float, radius: float, angle: float, speed: int):
+    def arc_interp(
+        self,
+        xc: float,
+        yc: float,
+        radius: float,
+        angle_start: float,
+        angle_end: float,
+        clockwise: bool,
+        speed: int
+    ):
         """圆弧插补"""
+        direction_text = "顺时针" if clockwise else "逆时针"
         return self.send_command(
-            CommandBuilder.arc_interp(xc, yc, radius, angle, speed),
-            f"圆弧: 圆心({xc:.1f}, {yc:.1f}) 半径{radius:.1f}mm 角度{angle:.0f}°"
+            CommandBuilder.arc_interp(xc, yc, radius, angle_start, angle_end, clockwise, speed),
+            (
+                f"圆弧: 圆心({xc:.1f}, {yc:.1f}) 半径{radius:.1f}mm "
+                f"起始角{angle_start:.1f}° 终止角{angle_end:.1f}° {direction_text}"
+            )
         )
     
     def stop(self):
@@ -532,21 +547,37 @@ class MainWindow(QMainWindow):
         self.arc_radius_input.setValue(10)
         layout.addWidget(self.arc_radius_input, 1, 1)
         
-        layout.addWidget(QLabel("角度 (°):"), 1, 2)
-        self.arc_angle_input = QDoubleSpinBox()
-        self.arc_angle_input.setRange(-360, 360)
-        self.arc_angle_input.setValue(90)
-        layout.addWidget(self.arc_angle_input, 1, 3)
+        layout.addWidget(QLabel("起始角 (°):"), 1, 2)
+        self.arc_start_angle_input = QDoubleSpinBox()
+        self.arc_start_angle_input.setDecimals(1)
+        self.arc_start_angle_input.setRange(-360, 360)
+        self.arc_start_angle_input.setSingleStep(1.0)
+        self.arc_start_angle_input.setValue(0)
+        layout.addWidget(self.arc_start_angle_input, 1, 3)
         
-        layout.addWidget(QLabel("速度:"), 2, 0)
+        layout.addWidget(QLabel("终止角 (°):"), 2, 0)
+        self.arc_end_angle_input = QDoubleSpinBox()
+        self.arc_end_angle_input.setDecimals(1)
+        self.arc_end_angle_input.setRange(-360, 360)
+        self.arc_end_angle_input.setSingleStep(1.0)
+        self.arc_end_angle_input.setValue(90)
+        layout.addWidget(self.arc_end_angle_input, 2, 1)
+
+        layout.addWidget(QLabel("方向:"), 2, 2)
+        self.arc_direction_combo = QComboBox()
+        self.arc_direction_combo.addItem("逆时针", False)
+        self.arc_direction_combo.addItem("顺时针", True)
+        layout.addWidget(self.arc_direction_combo, 2, 3)
+
+        layout.addWidget(QLabel("速度:"), 3, 0)
         self.arc_speed_input = QSpinBox()
         self.arc_speed_input.setRange(0, 10)
         self.arc_speed_input.setValue(10)
-        layout.addWidget(self.arc_speed_input, 2, 1, 1, 3)
+        layout.addWidget(self.arc_speed_input, 3, 1, 1, 3)
         
         arc_btn = QPushButton("执行圆弧插补")
         arc_btn.clicked.connect(self.on_arc_interp)
-        layout.addWidget(arc_btn, 3, 0, 1, 4)
+        layout.addWidget(arc_btn, 4, 0, 1, 4)
         
         group.setLayout(layout)
         return group
@@ -728,9 +759,11 @@ class MainWindow(QMainWindow):
         xc = self.arc_xc_input.value()
         yc = self.arc_yc_input.value()
         radius = self.arc_radius_input.value()
-        angle = self.arc_angle_input.value()
+        angle_start = self.arc_start_angle_input.value()
+        angle_end = self.arc_end_angle_input.value()
+        clockwise = bool(self.arc_direction_combo.currentData())
         speed = self.arc_speed_input.value()
-        self.controller.arc_interp(xc, yc, radius, angle, speed)
+        self.controller.arc_interp(xc, yc, radius, angle_start, angle_end, clockwise, speed)
     
     def on_query_status(self):
         """查询状态"""

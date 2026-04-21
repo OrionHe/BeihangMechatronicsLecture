@@ -137,17 +137,19 @@ void usb_handle_command(uint8_t cmd, uint8_t *data, uint8_t data_len)
             break;
         
         case CMD_ARC_INTERP:
-            /* 圆弧插补: [xc(4B) yc(4B) radius(4B) angle(4B) speed(2B)] */
-            if (data_len >= 18) {
-                float xc, yc, radius, angle;
+            /* 圆弧插补: [xc(4B) yc(4B) radius(4B) angle_start(4B) angle_end(4B) speed(2B)] */
+            if (data_len >= 23) {
+                float xc, yc, radius, angle_start, angle_end;
+                bool clockwise;
                 memcpy(&xc, &data[0], 4);
                 memcpy(&yc, &data[4], 4);
                 memcpy(&radius, &data[8], 4);
-                memcpy(&angle, &data[12], 4);
-                memcpy(&speed_int, &data[16], 2);
+                memcpy(&angle_start, &data[12], 4);
+                memcpy(&angle_end, &data[16], 4);
+                memcpy(&clockwise, &data[20], 1);
+                memcpy(&speed_int, &data[21], 2);
                 g_xyPlatform.CircularInterpolation(xc, yc, radius,
-                                                   (float)speed_int, angle,
-                                                   angle < 0.0f,
+                                                   (float)speed_int, angle_start, angle_end, clockwise,
                                                    g_xyPlatform.inter_step);
             }
             break;

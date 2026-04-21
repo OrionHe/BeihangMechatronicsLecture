@@ -121,17 +121,32 @@ class CommandBuilder:
         return ProtocolFrame().pack(CommandType.LINE_INTERP, data)
     
     @staticmethod
-    def arc_interp(xc: float, yc: float, radius: float, angle: float, speed: int) -> bytes:
+    def arc_interp(
+        xc: float,
+        yc: float,
+        radius: float,
+        angle_start: float,
+        angle_end: float,
+        clockwise: bool,
+        speed: int
+    ) -> bytes:
         """构建圆弧插补命令
         
         Args:
             xc: 圆心 X 坐标
             yc: 圆心 Y 坐标
             radius: 半径
-            angle: 扫过角度 (度)
+            angle_start: 起始角度 (度)
+            angle_end: 终止角度 (度)
+            clockwise: 方向，True=顺时针，False=逆时针
             speed: 速度
         """
-        data = struct.pack('<ffffH', xc, yc, radius, angle, speed)
+        data = struct.pack(
+            '<fffffBH',
+            xc, yc, radius, angle_start, angle_end,
+            1 if clockwise else 0,
+            speed
+        )
         return ProtocolFrame().pack(CommandType.ARC_INTERP, data)
     
     @staticmethod

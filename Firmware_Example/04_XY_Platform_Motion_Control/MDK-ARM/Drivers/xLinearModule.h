@@ -41,6 +41,8 @@ namespace x_linear_module
   public:
     /* 丝杠参数 */
     float lead;    // 导程，单位mm/rev
+    //控制参数
+    int8_t dir;    // 电机方向，由于物理正方向与接线和安装有关，用于调整电机期望的正方向
     float max_vel; // 最大速度，单位mm/s
     float acc;     // 加速度，单位mm/s^2
 

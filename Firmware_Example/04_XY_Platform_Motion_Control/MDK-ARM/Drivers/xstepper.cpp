@@ -27,7 +27,8 @@
 namespace xstepper
 {
   Stepper::Stepper(TIM_HandleTypeDef *p_htim, uint32_t channel, uint32_t tim_freq, float step_angle, float step_division, GPIO_TypeDef *dir_port, uint16_t dir_pin, GPIO_TypeDef *n_enable_port, uint16_t n_enable_pin)
-  : p_htim(p_htim), channel(channel), tim_freq(tim_freq), step_angle(step_angle), step_division(step_division), dir_port(dir_port), dir_pin(dir_pin), n_enable_port(n_enable_port), n_enable_pin(n_enable_pin)
+  : p_htim(p_htim), channel(channel), tim_freq(tim_freq), step_angle(step_angle), 
+  step_division(step_division), dir_port(dir_port), dir_pin(dir_pin), n_enable_port(n_enable_port), n_enable_pin(n_enable_pin)
   {}
 
   void Stepper::MotionConfig(int8_t dir, uint32_t step_max_vel, uint32_t step_acc)
@@ -53,25 +54,29 @@ namespace xstepper
   }
 
   void Stepper::SetTargetAngle(float target_angle_f)
-  {
+  {//此处位置环的速度恒为正值，在位置环中根据当前位置与目标位置的关系自动判断运动方向
     this->step_target_angle = (int64_t) (target_angle_f * this->step_division / this->step_angle);
     this->step_position_target_velocity = this->step_max_vel;
   }
 
   void Stepper::SetTargetAngleWithVel(float target_angle_f, float target_velocity_f)
   {
+    //此处位置环的速度恒为正值，在位置环中根据当前位置与目标位置的关系自动判断运动方向
     this->step_target_angle = (int64_t) (target_angle_f * this->step_division / this->step_angle);
-    this->step_position_target_velocity = (int32_t) (target_velocity_f * this->step_division / this->step_angle);
+    this->step_position_target_velocity = (int32_t) (abs((target_velocity_f * this->step_division / this->step_angle)));
+    this->step_position_target_velocity = this->step_position_target_velocity < this->step_max_vel ? this->step_position_target_velocity : this->step_max_vel  ;
   }
 
   void Stepper::SetTargetVelocity(float target_velocity_f)
   {
+    //此处速度环的速度可以为正值也可以为负值，正值表示与坐标轴方向一致的运动，负值表示与坐标轴方向相反的运动
     int32_t step_velocity = (int32_t) (target_velocity_f * this->step_division / this->step_angle);
     this->step_target_velocity = abs(step_velocity) < this->step_max_vel ? step_velocity : (this->step_max_vel * target_velocity_f / abs(target_velocity_f));
   }
 
   void Stepper::SetVelocityHard(float target_velocity_f)
   {
+    //此处速度环的速度可以为正值也可以为负值，正值表示与坐标轴方向一致的运动，负值表示与坐标轴方向相反的运动
     int32_t step_velocity = (int32_t) (target_velocity_f * this->step_division / this->step_angle);
     this->step_target_velocity = abs(step_velocity) < this->step_max_vel ? step_velocity : (this->step_max_vel * target_velocity_f / abs(target_velocity_f));
     this->step_current_velocity = this->step_target_velocity;
@@ -118,12 +123,13 @@ namespace xstepper
 
   void Stepper::OutputStepVelocity(int32_t step_velocity)
   {
+    //注意这里的dir为电机的正反转方向，正转方向与坐标轴方向一致即为1，反转方向与坐标轴方向相反即为-1
     int32_t real_step_velocity = this->dir * step_velocity; // 转换为实际步进电机的速度
     if (real_step_velocity > 0)
     {
       HAL_GPIO_WritePin(this->dir_port, this->dir_pin, GPIO_PIN_SET);
     }
-    else
+    else  
     {
       HAL_GPIO_WritePin(this->dir_port, this->dir_pin, GPIO_PIN_RESET);
     }

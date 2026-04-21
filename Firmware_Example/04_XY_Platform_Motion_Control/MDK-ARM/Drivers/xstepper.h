@@ -47,9 +47,9 @@ namespace xstepper
     float step_division; // 细分数
 
     /* 电机控制参数 */
-    int8_t dir = 1;               // 电机方向，由于物理正方向与接线和安装有关，用于调整电机期望的正方向
-    uint32_t step_max_vel = 18000; // 最大速度
-    uint32_t step_acc = 90000;    // 梯形加速度
+    int8_t dir;               // 电机方向，由于物理正方向与接线和安装有关，用于调整电机期望的正方向
+    int32_t step_max_vel; // 最大速度
+    int32_t step_acc;    // 梯形加速度
 
     /* 电机控制引脚 */
     GPIO_TypeDef *dir_port;

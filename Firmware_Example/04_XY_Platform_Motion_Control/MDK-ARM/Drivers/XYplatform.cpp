@@ -37,23 +37,31 @@ static float LinearInterJudge(float x_real, float y_real, float x_target,
   float f = x_e * y_i - x_i * y_e;
   return f;
 }
-
+static float CircularInterJudge(float x_real, float y_real, float center_x, float center_y, float radius) {
+  float x_c = x_real - center_x;
+  float y_c = y_real - center_y;
+  float f = x_c * x_c + y_c * y_c - radius * radius;
+  return f;
+}
 namespace xy_platform {
 XYplatform::XYplatform(x_linear_module::LinearModule *x,
-                       x_linear_module::LinearModule *y, float max_vel,
-                       float pid_kp, float pid_ki, float pid_kd,
-                       float pid_time_period_s)
-    : pos_pid_x(pid_kp, pid_ki, pid_kd, max_vel, pid_time_period_s),
-      pos_pid_y(pid_kp, pid_ki, pid_kd, max_vel, pid_time_period_s) {
+                       x_linear_module::LinearModule *y, float inter_step, float pid_limit_output,
+                      float pid_kp, float pid_ki, float pid_kd,
+                      float pid_time_period_s)
+    : pos_pid_x(pid_kp, pid_ki, pid_kd, pid_limit_output, pid_time_period_s),
+      pos_pid_y(pid_kp, pid_ki, pid_kd, pid_limit_output, pid_time_period_s),
+      inter_step(inter_step) {
   this->x = x;
   this->y = y;
 }
 
-void XYplatform::MotionConfig(int8_t x_dir, int8_t y_dir, float max_vel,
-                              float acc) {
+void XYplatform::MotionConfig(int8_t x_dir, int8_t y_dir, float max_vel,float acc) {
   x->MotionConfig(x_dir, max_vel, acc);
   y->MotionConfig(y_dir, max_vel, acc);
   this->max_vel = max_vel;
+  this->acc = acc;
+  this->x_dir = x_dir;
+  this->y_dir = y_dir;
 }
 
 void XYplatform::FindHome(void) {
@@ -109,17 +117,16 @@ void XYplatform::LinearInterpolation(float x, float y, float vel, float step) {
   this->LinearInterpolation(this->x_real, this->y_real, x, y, vel, step);
 }
 
-void XYplatform::LinearInterpolation(float x_start, float y_start, float x,
-                                     float y, float vel, float step) {
+void XYplatform::LinearInterpolation(float x_start, float y_start, float x_end,float y_end, float vel, float step) {
   // 先moveto到起始点
   this->MoveTo(x_start, y_start, vel);
   
   // 设置最终目标位置
-  this->interp_final_x = x;
-  this->interp_final_y = y;
+  this->x_interpolation_final = x_end ;
+  this->y_interpolation_final = y_end;
   
   // 设置插补参数
-  this->inter_vel = vel;
+  this->inter_vel =vel;
   this->inter_step = abs(step);
   
   // 设置插补起始位置为起点
@@ -129,51 +136,37 @@ void XYplatform::LinearInterpolation(float x_start, float y_start, float x,
   this->y_interpolation_target = y_start;
   
   // 标记正在等待到达起始点
-  this->interp_waiting_start = true;
+  this->linear_waiting_start = true;
 }
 
-void XYplatform::CircularInterpolation(float center_x, float center_y,
-                                       float radius, float vel, float angle,
-                                       bool clockwise, float step) {
-  // 先moveto到起始点（当前位置）
-  this->MoveTo(this->x_real, this->y_real, vel);
-  
-  // 记录圆弧参数
-  this->x_center = center_x;
-  this->y_center = center_y;
-  this->radius = radius;
-  this->clockwise = clockwise;
-  
-  // 计算圆弧角度
-  float start_angle = atan2f(this->y_real - center_y, this->x_real - center_x);
-  this->arc_start_angle = start_angle;
-  float sweep_angle = abs(angle) * DEG_TO_RAD;
-  this->arc_target_angle = start_angle + (clockwise ? -sweep_angle : sweep_angle);
-  this->arc_current_angle = start_angle;
-  
+void XYplatform::CircularInterpolation(float center_x, float center_y,float radius, float vel, float angle_start,float angle_end, bool clockwise, float step) {
+  float x_start = center_x + radius * arm_cos_f32(angle_start*DEG_TO_RAD);
+  float y_start = center_y + radius * arm_sin_f32(angle_start*DEG_TO_RAD);
+  this->MoveTo(x_start, y_start, vel);
+
   // 记录插补起始位置
-  this->x_interpolation_start = this->x_real;
-  this->y_interpolation_start = this->y_real;
-  this->x_interpolation_target = this->x_real;
-  this->y_interpolation_target = this->y_real;
-  
-  // 设置最终目标位置
-  this->x_target = center_x + radius * cosf(this->arc_target_angle);
-  this->y_target = center_y + radius * sinf(this->arc_target_angle);
-  
-  // 设置插补参数
-  this->inter_vel = vel;
-  this->inter_step = abs(step);
-  
-  // 标记正在等待到达圆弧插补起始点
-  this->arc_waiting_start = true;
+  this->x_interpolation_start = x_start;
+  this->y_interpolation_start = y_start;
+  this->x_interpolation_target = x_start;
+  this->y_interpolation_target = y_start;
+	this->x_center=center_x;
+	this->y_center=center_y;
+  // 设置插补目标位置
+  this->x_interpolation_final = center_x + radius * arm_cos_f32(angle_end*DEG_TO_RAD);
+  this->y_interpolation_final = center_y + radius * arm_sin_f32(angle_end*DEG_TO_RAD);
+
   // 设置插补速度
   this->inter_vel = vel;
   // 设置插补步长
+  this->inter_step = step;
+  // 设置圆弧插补方向
+  this->clockwise = clockwise;
+  // 设置圆弧插补半径
+  this->radius = radius;
+  // 设置插补步长
   this->inter_step = abs(step);
-
-  this->x->SetMode(x_linear_module::MODULE_MODE_POSITION);
-  this->y->SetMode(x_linear_module::MODULE_MODE_POSITION);
+  // 标记正在等待到达圆弧插补起始点
+  this->circular_waiting_start = true;
 }
 
 void XYplatform::ClosedLoopControl(float x_pos_ref, float y_pos_ref) {
@@ -196,163 +189,300 @@ void XYplatform::ControlLoop(void) {
 
   // 根据模式进行不同的控制
   if (this->mode == PLATFORM_MODE_IDLE) {
-  } else if (this->mode == PLATFORM_MODE_MANUAL) {
+  } 
+	else if (this->mode == PLATFORM_MODE_MANUAL) {
     // 检查是否在等待线性插补启动
-    if (this->interp_waiting_start) {
+    if (this->linear_waiting_start) {
       // 检查是否已到达起始点
       if (abs(this->x_real - this->x_interpolation_start) <= POSITION_ERROR_THRESHOLD &&
           abs(this->y_real - this->y_interpolation_start) <= POSITION_ERROR_THRESHOLD) {
         // 已到达起始点，切换到线性插补模式
         this->mode = PLATFORM_MODE_LINEAR_INTERPOLATION;
-        this->x_target = this->interp_final_x;
-        this->y_target = this->interp_final_y;
-        this->interp_waiting_start = false;
+        this->x_target = this->x_interpolation_final;
+        this->y_target = this->y_interpolation_final;
+        this->linear_waiting_start = false;
       }
     }
-    // 检查是否在等待圆弧插补启动
-    else if (this->arc_waiting_start) {
+    // // 检查是否在等待圆弧插补启动
+    else if (this->circular_waiting_start) {
       // 检查是否已到达起始点
       if (abs(this->x_real - this->x_interpolation_start) <= POSITION_ERROR_THRESHOLD &&
           abs(this->y_real - this->y_interpolation_start) <= POSITION_ERROR_THRESHOLD) {
         // 已到达起始点，切换到圆弧插补模式
         this->mode = PLATFORM_MODE_CIRCULAR_INTERPOLATION;
-        this->arc_waiting_start = false;
+        this->x_target = this->x_interpolation_final;
+        this->y_target = this->y_interpolation_final;
+        this->circular_waiting_start = false;
       }
     }
-  } else if (this->mode == PLATFORM_MODE_FIND_HOME) {
+  }
+  else if (this->mode == PLATFORM_MODE_FIND_HOME) {
     if (abs(this->x_real) <= POSITION_ERROR_THRESHOLD &&
         abs(this->y_real) <= POSITION_ERROR_THRESHOLD) {
       this->mode = PLATFORM_MODE_MANUAL;
     }
-  } else if (this->mode == PLATFORM_MODE_LINEAR_INTERPOLATION) {
+  } 
+	else if (this->mode == PLATFORM_MODE_LINEAR_INTERPOLATION) {
     // 检查是否到达目标位置
     if (abs(this->x_real - this->x_target) <= POSITION_ERROR_THRESHOLD &&
         abs(this->y_real - this->y_target) <= POSITION_ERROR_THRESHOLD) {
       this->mode = PLATFORM_MODE_MANUAL;
     }
+    //对水平/垂直直线做专门处理，避免 f==0 时插补轴不推进
+    else if (this->y_target - this->y_interpolation_start==0) {
+      // 水平线：只推进 X，Y 保持常量
+      if (abs(this->x_target - this->x_interpolation_target) <= this->inter_step) {
+        this->x_interpolation_target = this->x_target;
+      } else {
+         this->x_interpolation_target = this->x_real +((this->x_target >= this->x_interpolation_start) ? this->inter_step : -this->inter_step);
+      }
+    }
+    else if (this->x_target - this->x_interpolation_start==0) {
+      // 垂直线：只推进 Y，X 保持常量
+      if (abs(this->y_target - this->y_interpolation_target) <= this->inter_step) {
+        this->y_interpolation_target = this->y_target;
+      } else {
+        this->y_interpolation_target = this->y_real+((this->y_target >= this->y_interpolation_start) ? this->inter_step : -this->inter_step);
+      }
+    }
     // 计算插补目标位置
-    else if (this->x_target - this->x_real >= 0 &&
-             this->y_target - this->y_real >= 0) {
+    else if (this->x_target - this->x_real >0 &&this->y_target - this->y_real > 0) {
       // 第一象限
-      if (LinearInterJudge(this->x_real, this->y_real, this->x_target,
-                           this->y_target, this->x_interpolation_start,
-                           this->y_interpolation_start) > 0) {
+      if (LinearInterJudge(this->x_real, this->y_real, this->x_target,this->y_target, this->x_interpolation_start,this->y_interpolation_start) >= 0) {
         // 是否可以一步完成
-        if (abs(this->x_target - this->x_interpolation_target) <=
-            this->inter_step) {
+        if (abs(this->x_target - this->x_interpolation_target) <=this->inter_step) {
           this->x_interpolation_target = this->x_target;
         } else {
           this->x_interpolation_target = this->x_real + this->inter_step;
         }
       } else {
         // 是否可以一步完成
-        if (abs(this->y_target - this->y_interpolation_target) <=
-            this->inter_step) {
+        if (abs(this->y_target - this->y_interpolation_target) <=this->inter_step) {
           this->y_interpolation_target = this->y_target;
         } else {
           this->y_interpolation_target = this->y_real + this->inter_step;
         }
       }
-    } else if (this->x_target - this->x_real <= 0 &&
-               this->y_target - this->y_real >= 0) {
+    }
+    else if (this->x_target - this->x_real < 0 &&this->y_target - this->y_real >0) {
       // 第二象限
-      if (LinearInterJudge(this->x_real, this->y_real, this->x_target,
-                           this->y_target, this->x_interpolation_start,
-                           this->y_interpolation_start) > 0) {
+      if (LinearInterJudge(this->x_real, this->y_real, this->x_target,this->y_target, this->x_interpolation_start,this->y_interpolation_start) >= 0) {
         // 是否可以一步完成
-        if (abs(this->x_target - this->x_interpolation_target) <=
-            this->inter_step) {
-          this->x_interpolation_target = this->x_target;
-        } else {
-          this->x_interpolation_target = this->x_real - this->inter_step;
-        }
-      } else {
-        // 是否可以一步完成
-        if (abs(this->y_target - this->y_interpolation_target) <=
-            this->inter_step) {
+        if (abs(this->y_target - this->y_interpolation_target) <=this->inter_step) {
           this->y_interpolation_target = this->y_target;
         } else {
           this->y_interpolation_target = this->y_real + this->inter_step;
         }
-      }
-    } else if (this->x_target - this->x_real <= 0 &&
-               this->y_target - this->y_real <= 0) {
-      // 第三象限
-      if (LinearInterJudge(this->x_real, this->y_real, this->x_target,
-                           this->y_target, this->x_interpolation_start,
-                           this->y_interpolation_start) > 0) {
+        
+      } else {
         // 是否可以一步完成
-        if (abs(this->x_target - this->x_interpolation_target) <=
-            this->inter_step) {
+        if (abs(this->x_target - this->x_interpolation_target) <=this->inter_step) {
+          this->x_interpolation_target = this->x_target;
+        } else {
+          this->x_interpolation_target = this->x_real - this->inter_step;
+        }
+      }
+    } else if (this->x_target - this->x_real < 0 &&this->y_target - this->y_real <0) {
+      // 第三象限
+      if (LinearInterJudge(this->x_real, this->y_real, this->x_target,this->y_target, this->x_interpolation_start,this->y_interpolation_start) >= 0) {
+        // 是否可以一步完成
+        if (abs(this->x_target - this->x_interpolation_target) <=this->inter_step) {
           this->x_interpolation_target = this->x_target;
         } else {
           this->x_interpolation_target = this->x_real - this->inter_step;
         }
       } else {
         // 是否可以一步完成
-        if (abs(this->y_target - this->y_interpolation_target) <=
-            this->inter_step) {
+        if (abs(this->y_target - this->y_interpolation_target) <=this->inter_step) {
           this->y_interpolation_target = this->y_target;
         } else {
           this->y_interpolation_target = this->y_real - this->inter_step;
         }
       }
-    } else if (this->x_target - this->x_real >= 0 &&
-               this->y_target - this->y_real <= 0) {
+    } else if (this->x_target - this->x_real > 0 &&this->y_target - this->y_real <0) {
       // 第四象限
-      if (LinearInterJudge(this->x_real, this->y_real, this->x_target,
-                           this->y_target, this->x_interpolation_start,
-                           this->y_interpolation_start) > 0) {
+      if (LinearInterJudge(this->x_real, this->y_real, this->x_target,this->y_target, this->x_interpolation_start,this->y_interpolation_start) >= 0) {
         // 是否可以一步完成
-        if (abs(this->x_target - this->x_interpolation_target) <=
-            this->inter_step) {
-          this->x_interpolation_target = this->x_target;
-        } else {
-          this->x_interpolation_target = this->x_real + this->inter_step;
-        }
-      } else {
-        // 是否可以一步完成
-        if (abs(this->y_target - this->y_interpolation_target) <=
-            this->inter_step) {
+        if (abs(this->y_target - this->y_interpolation_target) <=this->inter_step) {
           this->y_interpolation_target = this->y_target;
         } else {
           this->y_interpolation_target = this->y_real - this->inter_step;
+        }
+
+      } else {
+        // 是否可以一步完成
+        if (abs(this->x_target - this->x_interpolation_target) <=this->inter_step) {
+          this->x_interpolation_target = this->x_target;
+        } else {
+          this->x_interpolation_target = this->x_real + this->inter_step;
         }
       }
     }
     // 设定插补目标位置
-    this->x->SetTargetPositionWithVelocity(this->x_interpolation_target,
-                                           this->inter_vel);
-    this->y->SetTargetPositionWithVelocity(this->y_interpolation_target,
-                                           this->inter_vel);
-  } else if (this->mode == PLATFORM_MODE_CIRCULAR_INTERPOLATION) {
-    // 检查是否到达目标位置
-    if (abs(this->x_real - this->x_target) <= POSITION_ERROR_THRESHOLD &&
-        abs(this->y_real - this->y_target) <= POSITION_ERROR_THRESHOLD) {
+    this->x->SetTargetPositionWithVelocity(this->x_interpolation_target,this->inter_vel);
+    this->y->SetTargetPositionWithVelocity(this->y_interpolation_target,this->inter_vel);
+  } 
+	else if (this->mode == PLATFORM_MODE_CIRCULAR_INTERPOLATION) {
+     // 检查是否到达目标位置
+    if (abs(this->x_real - this->x_target) <= POSITION_ERROR_THRESHOLD &&abs(this->y_real - this->y_target) <= POSITION_ERROR_THRESHOLD) {
       this->mode = PLATFORM_MODE_MANUAL;
-    } else {
-      if (this->radius > 0.0f && this->inter_step > 0.0f) {
-        float step_angle = this->inter_step / this->radius;
-        float next_angle = this->arc_current_angle +
-                           (this->clockwise ? -step_angle : step_angle);
-        if ((!this->clockwise && next_angle > this->arc_target_angle) ||
-            (this->clockwise && next_angle < this->arc_target_angle)) {
-          next_angle = this->arc_target_angle;
+    }   
+    else if ( this->x_real-this->x_center > 0 &&this->y_real-this->y_center >= 0) {
+      // 第一象限
+      if (CircularInterJudge(this->x_real, this->y_real, this->x_center,this->y_center, this->radius) >= 0) 
+      {
+        if (this->clockwise) {
+          if (abs(this->y_target - this->y_interpolation_target) <=this->inter_step&&abs(this->x_target - this->x_interpolation_target) <=this->inter_step) {
+            this->y_interpolation_target = this->y_target;
+          } 
+          else {
+            this->y_interpolation_target = this->y_real - this->inter_step;
+          }
+        } 
+        else {
+          if(abs(this->x_target - this->x_interpolation_target) <=this->inter_step&&abs(this->y_target - this->y_interpolation_target) <=this->inter_step) {
+            this->x_interpolation_target = this->x_target;
+          } else {
+            this->x_interpolation_target = this->x_real - this->inter_step;
+          }
         }
-        this->arc_current_angle = next_angle;
-        this->x_interpolation_target =
-          this->x_center + this->radius * cosf(this->arc_current_angle);
-        this->y_interpolation_target =
-          this->y_center + this->radius * sinf(this->arc_current_angle);
+      } 
+      else {
+        if (this->clockwise) {
+          if (abs(this->x_target - this->x_interpolation_target) <=this->inter_step&&abs(this->y_target - this->y_interpolation_target) <=this->inter_step) {
+            this->x_interpolation_target = this->x_target;
+          } 
+          else {
+            this->x_interpolation_target = this->x_real + this->inter_step;
+          }
+        } 
+        else {
+          if(abs(this->y_target - this->y_interpolation_target) <=this->inter_step&&abs(this->x_target - this->x_interpolation_target) <=this->inter_step) {
+            this->y_interpolation_target = this->y_target;
+          } else {
+            this->y_interpolation_target = this->y_real + this->inter_step;
+          }
+        }
       }
-
-      // 设定插补目标位置
-      this->x->SetTargetPositionWithVelocity(this->x_interpolation_target,
-                                             this->inter_vel);
-      this->y->SetTargetPositionWithVelocity(this->y_interpolation_target,
-                                             this->inter_vel);
     }
-  } else if (this->mode == PLATFORM_MODE_CLOSED_LOOP) {
+    else if ( this->x_real-this->x_center <= 0 &&this->y_real-this->y_center > 0) {
+      // 第二象限
+      if (CircularInterJudge(this->x_real, this->y_real, this->x_center,this->y_center, this->radius) >= 0) 
+      {
+        if (this->clockwise) {
+          if (abs(this->x_target - this->x_interpolation_target) <=this->inter_step&&abs(this->y_target - this->y_interpolation_target) <=this->inter_step) {
+            this->x_interpolation_target = this->x_target;
+          } 
+          else {
+            this->x_interpolation_target = this->x_real + this->inter_step;
+          }
+        } 
+        else {
+          if(abs(this->y_target - this->y_interpolation_target) <=this->inter_step&&abs(this->x_target - this->x_interpolation_target) <=this->inter_step) {
+            this->y_interpolation_target = this->y_target;
+          } else {
+            this->y_interpolation_target = this->y_real - this->inter_step;
+          }
+        }
+      } 
+      else {
+        if (this->clockwise) {
+          if (abs(this->y_target - this->y_interpolation_target) <=this->inter_step&&abs(this->x_target - this->x_interpolation_target) <=this->inter_step) {
+            this->y_interpolation_target = this->y_target;
+          } 
+          else {
+            this->y_interpolation_target = this->y_real + this->inter_step;
+          }
+        } 
+        else {
+          if(abs(this->x_target - this->x_interpolation_target) <=this->inter_step&&abs(this->y_target - this->y_interpolation_target) <=this->inter_step) {
+            this->x_interpolation_target = this->x_target;
+          } else {
+            this->x_interpolation_target = this->x_real - this->inter_step;
+          }
+        }
+      }
+    }
+    else if ( this->x_real-this->x_center < 0 &&this->y_real-this->y_center <= 0) {
+      // 第三象限
+      if (CircularInterJudge(this->x_real, this->y_real, this->x_center,this->y_center, this->radius) >= 0) 
+      {
+        if (this->clockwise) {
+          if (abs(this->y_target - this->y_interpolation_target) <=this->inter_step&&abs(this->x_target - this->x_interpolation_target) <=this->inter_step) {
+            this->y_interpolation_target = this->y_target;
+          } 
+          else {
+            this->y_interpolation_target = this->y_real + this->inter_step;
+          }
+        } 
+        else {
+          if(abs(this->x_target - this->x_interpolation_target) <=this->inter_step&&abs(this->y_target - this->y_interpolation_target) <=this->inter_step) {
+            this->x_interpolation_target = this->x_target;
+          } else {
+            this->x_interpolation_target = this->x_real + this->inter_step;
+          }
+        }
+      } 
+      else {
+        if (this->clockwise) {
+          if (abs(this->x_target - this->x_interpolation_target) <=this->inter_step&&abs(this->y_target - this->y_interpolation_target) <=this->inter_step) {
+            this->x_interpolation_target = this->x_target;
+          } 
+          else {
+            this->x_interpolation_target = this->x_real - this->inter_step;
+          }
+        } 
+        else {
+          if(abs(this->y_target - this->y_interpolation_target) <=this->inter_step&&abs(this->x_target - this->x_interpolation_target) <=this->inter_step) {
+            this->y_interpolation_target = this->y_target;
+          } else {
+            this->y_interpolation_target = this->y_real - this->inter_step;
+          }
+        }
+      }
+    }
+    else if (this->x_real-this->x_center >= 0 &&this->y_real-this->y_center < 0) {
+      // 第四象限
+      if (CircularInterJudge(this->x_real, this->y_real, this->x_center,this->y_center, this->radius) >= 0) 
+      {
+        if (this->clockwise) {
+          if (abs(this->x_target - this->x_interpolation_target) <=this->inter_step&&abs(this->y_target - this->y_interpolation_target) <=this->inter_step) {
+            this->x_interpolation_target = this->x_target;
+          } 
+          else {
+            this->x_interpolation_target = this->x_real - this->inter_step;
+          }
+        } 
+        else {
+          if(abs(this->y_target - this->y_interpolation_target) <=this->inter_step&&abs(this->x_target - this->x_interpolation_target) <=this->inter_step) {
+            this->y_interpolation_target = this->y_target;    
+          } else {
+            this->y_interpolation_target = this->y_real + this->inter_step;
+          }
+        }         
+      }
+      else {
+        if (this->clockwise) {
+          if (abs(this->y_target - this->y_interpolation_target) <=this->inter_step&&abs(this->x_target - this->x_interpolation_target) <=this->inter_step) {
+            this->y_interpolation_target = this->y_target;
+          } 
+          else {
+            this->y_interpolation_target = this->y_real - this->inter_step;
+          }
+        } 
+        else {
+          if(abs(this->x_target - this->x_interpolation_target) <=this->inter_step&&abs(this->y_target - this->y_interpolation_target) <=this->inter_step) {
+            this->x_interpolation_target = this->x_target;
+          } else {
+            this->x_interpolation_target = this->x_real + this->inter_step;
+          }
+        }
+      }
+    }
+    this->x->SetTargetPositionWithVelocity(this->x_interpolation_target,this->inter_vel);
+    this->y->SetTargetPositionWithVelocity(this->y_interpolation_target,this->inter_vel);
+  }
+  else if (this->mode == PLATFORM_MODE_CLOSED_LOOP) {
     // 判断是否到达目标位置
     if (abs(this->x_real - this->x_target) <= POSITION_ERROR_THRESHOLD &&
         abs(this->y_real - this->y_target) <= POSITION_ERROR_THRESHOLD) {
@@ -401,9 +531,7 @@ void XYplatform::GetStatus(float *curr_x, float *curr_y, uint8_t *status) {
       *status = 0xFF;
     } else if (this->mode == PLATFORM_MODE_FIND_HOME) {
       *status = 0x01;
-    } else if (this->mode == PLATFORM_MODE_LINEAR_INTERPOLATION ||
-               this->mode == PLATFORM_MODE_CIRCULAR_INTERPOLATION ||
-               this->mode == PLATFORM_MODE_CLOSED_LOOP) {
+    } else if (this->mode == PLATFORM_MODE_LINEAR_INTERPOLATION ||this->mode == PLATFORM_MODE_CIRCULAR_INTERPOLATION ||this->mode == PLATFORM_MODE_CLOSED_LOOP) {
       *status = 0x02;
     } else {
       *status = 0x00;

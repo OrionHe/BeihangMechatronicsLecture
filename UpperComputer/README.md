@@ -7,7 +7,7 @@
 - ✅ 回零（自动寻找原点）
 - ✅ 点位控制（绝对/相对位移）
 - ✅ 直线插补（两点间直线运动）
-- ✅ 圆弧插补（圆心/半径/角度控制）
+- ✅ 圆弧插补（圆心/半径/起止角/方向控制）
 - ✅ 实时状态显示（X/Y 坐标、运动状态）
 - ✅ 紧急停止
 - ✅ 可视化日志
@@ -101,16 +101,18 @@ python3 main.py
   ```
 
 #### 0x05 - 圆弧插补 (ARC_INTERP)
-- **Data**: `xc(4B) | yc(4B) | radius(4B) | angle(4B) | speed(2B)`
+- **Data**: `xc(4B) | yc(4B) | radius(4B) | angle_start(4B) | angle_end(4B) | clockwise(1B) | speed(2B)`
 - **参数**:
   - xc, yc: 圆心坐标
   - radius: 圆弧半径 (mm)
-  - angle: 扫过角度 (°)，正值逆时针，负值顺时针
+  - angle_start: 起始角度 (°)
+  - angle_end: 终止角度 (°)
+  - clockwise: 方向（0=逆时针, 1=顺时针）
   - speed: 运动速度
 - **例子**:
   ```python
-  # 以 (25, 25) 为圆心，半径 10mm，逆时针扫过 90°
-  CommandBuilder.arc_interp(25, 25, 10, 90, 5000)
+  # 以 (25, 25) 为圆心，半径 10mm，逆时针从 0° 运动到 90°
+  CommandBuilder.arc_interp(25, 25, 10, 0, 90, False, 5000)
   ```
 
 #### 0x06 - 停止 (STOP)
@@ -162,7 +164,8 @@ python3 main.py
 5. **圆弧插补**
    - 输入圆心 (Xc, Yc)
    - 输入半径
-   - 输入扫过角度 (±360°)
+   - 输入起始角和终止角（°）
+   - 选择插补方向（顺时针/逆时针）
 
 ### 右侧面板 - 日志和诊断
 - **实时日志**: 显示所有操作记录
@@ -205,8 +208,8 @@ comm.send_data(cmd_bytes)
 cmd_bytes = CommandBuilder.line_interp(0, 0, 50, 50, 5000)
 comm.send_data(cmd_bytes)
 
-# 圆弧插补 - 以 (25, 25) 为圆心，半径 10mm，逆时针 90°
-cmd_bytes = CommandBuilder.arc_interp(25, 25, 10, 90, 5000)
+# 圆弧插补 - 以 (25, 25) 为圆心，半径 10mm，逆时针从 0° 到 90°
+cmd_bytes = CommandBuilder.arc_interp(25, 25, 10, 0, 90, False, 5000)
 comm.send_data(cmd_bytes)
 
 # 查询状态
@@ -473,7 +476,7 @@ for i in range(len(points)-1):
 
 ```python
 # 画一个半径 20mm 的圆
-cmd = CommandBuilder.arc_interp(50, 50, 20, 360, 5000)
+cmd = CommandBuilder.arc_interp(50, 50, 20, 0, 360, False, 5000)
 comm.send_data(cmd)
 ```
 
