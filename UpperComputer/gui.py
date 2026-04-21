@@ -3,6 +3,7 @@ PyQt5 图形界面主窗口 - 美化版本，带 XY 平台坐标图
 """
 
 import sys
+import math
 import logging
 from datetime import datetime
 from typing import Optional
@@ -763,6 +764,7 @@ class MainWindow(QMainWindow):
         angle_end = self.arc_end_angle_input.value()
         clockwise = bool(self.arc_direction_combo.currentData())
         speed = self.arc_speed_input.value()
+        self.canvas.set_target_position(xc + radius * math.cos(math.radians(angle_end)), yc + radius * math.sin(math.radians(angle_end)))
         self.controller.arc_interp(xc, yc, radius, angle_start, angle_end, clockwise, speed)
     
     def on_query_status(self):
