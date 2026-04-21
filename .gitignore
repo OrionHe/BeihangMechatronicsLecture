@@ -89,3 +89,4 @@ Hardware/Tutorial\ Board/__Previews/
 # !my_customized_scatter_file.sct
 
 __pycache__/
+.idea/
