@@ -93,7 +93,7 @@ namespace xstepper
     {
       __HAL_TIM_SET_AUTORELOAD(this->p_htim, 999);
       __HAL_TIM_SET_COMPARE(this->p_htim, this->channel, 0);
-      // HAL_TIM_PWM_Stop_IT(this->p_htim, this->channel);
+      //HAL_TIM_PWM_Stop_IT(this->p_htim, this->channel);
       this->is_running = false;
       return;
     }

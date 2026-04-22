@@ -131,13 +131,6 @@ namespace x_linear_module
       */
     float GetPosition(void);
     /**
-      * @brief  直到限位开关触发
-      * @author Xiang Guo
-      * @param  none
-      * @retval none
-      */
-    void FindZero(void);
-    /**
       * @brief  控制回路，在PWM定时器中断中调用
       * @author Xiang Guo
       * @param  target_velocity_f 目标速度，单位：度/s

@@ -63,6 +63,9 @@ namespace x_linear_module
       case MODULE_MODE_POSITION:
         this->stepper.SetMode(xstepper::STEPPER_MODE_POSITION);
         break;
+      case MODULE_MODE_ERROR:
+        this->stepper.SetMode(xstepper::STEPPER_MODE_IDLE);
+        break;
       default:
         break;
     }

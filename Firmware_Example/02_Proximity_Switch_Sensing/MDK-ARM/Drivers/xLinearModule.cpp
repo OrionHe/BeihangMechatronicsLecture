@@ -62,6 +62,9 @@ namespace x_linear_module
       case MODULE_MODE_POSITION:
         this->stepper.SetMode(xstepper::STEPPER_MODE_POSITION);
         break;
+      case MODULE_MODE_ERROR:
+        this->stepper.SetMode(xstepper::STEPPER_MODE_IDLE);
+        break;
       default:
         break;
     }
@@ -97,11 +100,7 @@ namespace x_linear_module
     return (float)((float)(this->stepper.step_current_angle) * (float)(this->stepper.step_angle) * this->lead / this->stepper.step_division / 360.0f);
   }
 
-  void LinearMoudle::FindZero(void)
-  {
-    this->SetMode(MODULE_MODE_VELOCITY);
-    this->SetTargetVelocity(-10.0f);
-  }
+
   void LinearModule::ControlLoop(void)
   {
     // 限位检测
