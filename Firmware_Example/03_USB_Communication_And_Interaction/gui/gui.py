@@ -58,8 +58,8 @@ class XYPlotCanvas(FigureCanvas):
         self.ax.set_title('XY Platform Real-time Position')
         
         # 初始化
-        self.ax.set_xlim(-5, 105)
-        self.ax.set_ylim(-5, 105)
+        self.ax.set_xlim(-5, 405)
+        self.ax.set_ylim(-5, 405)
         self.ax.set_aspect('equal', adjustable='box')
         
         # 轨迹记录

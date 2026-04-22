@@ -173,12 +173,12 @@ class ResponseParser:
                 'error': 错误码
             }
         """
-        if len(data) < 20:
+        if len(data) < 15:
             raise ValueError(f"Invalid status data length: {len(data)}")
         
         # 格式: x_pos(4B) y_pos(4B) x_status(1B) y_status(1B) x_vel(2B) y_vel(2B) error(1B)
         x_pos, y_pos, x_status, y_status, x_vel, y_vel, error = struct.unpack(
-            '<ffBBHHB', data[:19]
+            '<ffBBHHB', data[:15]
         )
         
         return {
