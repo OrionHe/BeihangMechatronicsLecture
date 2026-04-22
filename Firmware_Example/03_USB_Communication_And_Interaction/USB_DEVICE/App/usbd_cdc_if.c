@@ -7,7 +7,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2026 STMicroelectronics.
+  * Copyright (c) 2025 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -22,7 +22,8 @@
 #include "usbd_cdc_if.h"
 
 /* USER CODE BEGIN INCLUDE */
-
+#include "xusb.h"
+#include "cmsis_os2.h"
 /* USER CODE END INCLUDE */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -62,6 +63,8 @@
   */
 
 /* USER CODE BEGIN PRIVATE_DEFINES */
+#define USB_CDC_RX_PACKET_MAX   64U
+#define USB_CDC_RX_QUEUE_DEPTH  16U
 /* USER CODE END PRIVATE_DEFINES */
 
 /**
@@ -94,6 +97,20 @@ uint8_t UserRxBufferFS[APP_RX_DATA_SIZE];
 uint8_t UserTxBufferFS[APP_TX_DATA_SIZE];
 
 /* USER CODE BEGIN PRIVATE_VARIABLES */
+/* USB 接收采用“回调先入队、任务后解析”的方式：
+ * 1) CDC_Receive_FS 只负责把每个 USB OUT 包复制到这里的环形队列；
+ * 2) usbRxTask 在任务上下文中通过 USB_CDC_RxPop 逐包取出并做协议拆帧。
+ */
+typedef struct
+{
+  uint16_t len;
+  uint8_t data[USB_CDC_RX_PACKET_MAX];
+} usb_cdc_rx_packet_t;
+
+static usb_cdc_rx_packet_t s_usb_rx_queue[USB_CDC_RX_QUEUE_DEPTH];
+static volatile uint8_t s_usb_rx_write_idx = 0U;
+static volatile uint8_t s_usb_rx_read_idx = 0U;
+static volatile uint32_t s_usb_rx_drop_count = 0U;
 
 /* USER CODE END PRIVATE_VARIABLES */
 
@@ -109,6 +126,7 @@ uint8_t UserTxBufferFS[APP_TX_DATA_SIZE];
 extern USBD_HandleTypeDef hUsbDeviceFS;
 
 /* USER CODE BEGIN EXPORTED_VARIABLES */
+extern osThreadId_t usbRxTaskHandle;
 
 /* USER CODE END EXPORTED_VARIABLES */
 
@@ -261,6 +279,29 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
 static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
 {
   /* USER CODE BEGIN 6 */
+  /* 当前 USB OUT 包写入环形队列，满队列或超长包直接丢弃并计数。 */
+  uint8_t write_idx = s_usb_rx_write_idx;
+  uint8_t next_write_idx = (uint8_t)((write_idx + 1U) % USB_CDC_RX_QUEUE_DEPTH);
+
+  if ((next_write_idx == s_usb_rx_read_idx) || (*Len > USB_CDC_RX_PACKET_MAX))
+  {
+    s_usb_rx_drop_count++;
+  }
+  else
+  {
+    /* 复制一份到静态缓冲区，避免后续 USB 栈复用 Buf 时覆盖数据。 */
+    s_usb_rx_queue[write_idx].len = (uint16_t)(*Len);
+    memcpy(s_usb_rx_queue[write_idx].data, Buf, *Len);
+    s_usb_rx_write_idx = next_write_idx;
+
+    /* 唤醒 USB 接收任务，由任务侧继续做协议解析。 */
+    if (usbRxTaskHandle != NULL)
+    {
+      (void)osThreadFlagsSet(usbRxTaskHandle, USB_RX_THREAD_FLAG_DATA);
+    }
+  }
+
+  /* 重新挂起下一次 OUT 接收，保证 USB CDC 持续可收包。 */
   USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
   USBD_CDC_ReceivePacket(&hUsbDeviceFS);
   return (USBD_OK);
@@ -316,6 +357,41 @@ static int8_t CDC_TransmitCplt_FS(uint8_t *Buf, uint32_t *Len, uint8_t epnum)
 }
 
 /* USER CODE BEGIN PRIVATE_FUNCTIONS_IMPLEMENTATION */
+uint8_t USB_CDC_RxPop(uint8_t *buf, uint32_t buf_size, uint32_t *len)
+{
+  uint8_t read_idx;
+  uint32_t copy_len;
+
+  if ((buf == NULL) || (len == NULL) || (buf_size == 0U))
+  {
+    return 0U;
+  }
+
+  /* 队列空则返回 0，调用方据此退出本轮处理。 */
+  if (s_usb_rx_read_idx == s_usb_rx_write_idx)
+  {
+    return 0U;
+  }
+
+  /* 取出最早入队的数据包，按调用方缓冲区大小截断后返回。 */
+  read_idx = s_usb_rx_read_idx;
+  copy_len = s_usb_rx_queue[read_idx].len;
+  if (copy_len > buf_size)
+  {
+    copy_len = buf_size;
+  }
+
+  memcpy(buf, s_usb_rx_queue[read_idx].data, copy_len);
+  *len = copy_len;
+  s_usb_rx_read_idx = (uint8_t)((read_idx + 1U) % USB_CDC_RX_QUEUE_DEPTH);
+
+  return 1U;
+}
+
+uint32_t USB_CDC_RxDropCount(void)
+{
+  return s_usb_rx_drop_count;
+}
 
 /* USER CODE END PRIVATE_FUNCTIONS_IMPLEMENTATION */
 

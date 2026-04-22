@@ -17,6 +17,7 @@
 #include "my_config.h"
 #include "xusb.h"
 #include "usb_device.h"
+#include "usbd_cdc_if.h"
 /* ------------------------------ Defines ------------------------------ */
 
 /* ------------------------------ Variables ------------------------------ */
@@ -41,15 +42,13 @@ void StartUsbRxTask(void *argument);
 
 void My_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-  if (htim->Instance == g_xyPlatform.x->stepper.p_htim->Instance)
+  if (htim->Instance == g_linearModule[0].stepper.p_htim->Instance)
   {
-    g_xyPlatform.x->ControlLoop();
-    // g_xyPlatform.ControlLoop();
+    g_linearModule[0].ControlLoop();
   }
-  else if (htim->Instance == g_xyPlatform.y->stepper.p_htim->Instance)
+  else if (htim->Instance == g_linearModule[1].stepper.p_htim->Instance)
   {
-    g_xyPlatform.y->ControlLoop();
-    // g_xyPlatform.ControlLoop();
+    g_linearModule[1].ControlLoop();
   }
 }
 
@@ -64,11 +63,16 @@ void My_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 void StartDefaultTask(void *argument)
 {
   MX_USB_DEVICE_Init();
-  g_xyPlatform.MotionConfig(1, 1, 10.0f, 500.0f);
-  g_xyPlatform.x->SetMode(x_linear_module::MODULE_MODE_VELOCIY);
-  g_xyPlatform.y->SetMode(x_linear_module::MODULE_MODE_VELOCIY);
+  // g_xyPlatform.MotionConfig(1, 1, 10.0f, 500.0f);
+  // g_xyPlatform.x->SetMode(x_linear_module::MODULE_MODE_VELOCITY);
+  // g_xyPlatform.y->SetMode(x_linear_module::MODULE_MODE_VELOCITY);
+  g_linearModule[0].MotionConfig(1, 10.0f, 100.0f);
+  g_linearModule[1].MotionConfig(1, 10.0f, 100.0f);
+  g_linearModule[0].SetMode(x_linear_module::MODULE_MODE_VELOCITY);
+  g_linearModule[1].SetMode(x_linear_module::MODULE_MODE_VELOCITY);
   osThreadResume(debugTaskHandle);
   osThreadResume(keyScanTaskHandle);
+  osThreadResume(usbRxTaskHandle);
   osThreadSuspend(defaultTaskHandle);
   /* Infinite loop */
   for (;;)
@@ -103,13 +107,13 @@ void StartDebugTask(void *argument)
 //     {
 //       g_linearModule[1].SetTargetVelocity(10.0f);
 //     }
-    g_xyPlatform.ControlLoop();
+    // g_xyPlatform.ControlLoop();
     osDelay(1);
   }
 }
 
 /**
-  * @brief  按键扫描任务，50ms扫描一次按键，更新按键状态，按键按下时，更新按键状态为按下，按键释放时，更新按键状态为释放
+  * @brief  Key scan task, update key states every 50ms.
   * @param  none
   * @retval none
   */
@@ -127,20 +131,89 @@ void StartKeyScanTask(void *argument)
 
 void StartUsbRxTask(void *argument)
 {
-  uint8_t cmd;
-  uint8_t *data;
-  uint8_t data_len;
+  (void)argument;
+
+  /* 解析过程中先缓存“单个 USB 包”和“连续字节流”两层数据：
+   * packet_buf  用来接收 USB CDC 回调从队列里取出的单个包；
+   * stream_buf  用来拼接多个包，解决一条协议帧被 USB 分包的情况。
+   */
+  uint8_t cmd = 0U;
+  uint8_t *data = nullptr;
+  uint8_t data_len = 0U;
+  uint8_t packet_buf[64];
+  uint32_t packet_len = 0U;
+  uint8_t stream_buf[512];
+  uint16_t stream_len = 0U;
+
   for (;;)
   {
-    if (flag_usb) //可能会错过一些消息，但简单起见先这样实现，后续可以改成消息队列或者信号量
+    /* 等待 USB 接收回调置位通知，避免任务空转。 */
+    (void)osThreadFlagsWait(USB_RX_THREAD_FLAG_DATA, osFlagsWaitAny, osWaitForever);
+
+    /* 把队列中的 USB 包全部取空，并顺序拼接到 stream_buf 中。 */
+    while (USB_CDC_RxPop(packet_buf, sizeof(packet_buf), &packet_len))
     {
-      // Process USB received data
-      if(usb_parse_command(Buffer_usb, Len_usb, &cmd, &data, &data_len))
+      /* 如果当前缓冲区装不下新包，直接清空重新开始，避免旧残留影响解析。 */
+      if ((stream_len + packet_len) > sizeof(stream_buf))
       {
-        usb_handle_command(cmd, data, data_len);
+        stream_len = 0U;
       }
-      flag_usb = 0;
+
+      /* 将本次 USB 包追加到连续流尾部。 */
+      memcpy(&stream_buf[stream_len], packet_buf, packet_len);
+      stream_len += (uint16_t)packet_len;
+
+      /* 在连续流中查找完整协议帧：
+       * [HEADER][CMD][LEN][DATA...][CHECKSUM][TAIL]
+       * 最短长度为 5 字节，因此少于 5 字节时不可能构成完整帧。
+       */
+      uint16_t parse_pos = 0U;
+      while ((stream_len - parse_pos) >= 5U)
+      {
+        /* 先找帧头，跳过无效字节或半包残留。 */
+        if (stream_buf[parse_pos] != FRAME_HEADER)
+        {
+          parse_pos++;
+          continue;
+        }
+
+        /* 第 3 个字节是数据长度，整帧长度 = 1(头) + 1(cmd) + 1(len) + data + 1(checksum) + 1(尾)。 */
+        uint16_t frame_len = (uint16_t)stream_buf[parse_pos + 2U] + 5U;
+        if ((stream_len - parse_pos) < frame_len)
+        {
+          /* 当前还没有收齐整帧，保留残余数据等待后续 USB 包补齐。 */
+          break;
+        }
+
+        /* 帧尾正确时才进入命令解析，避免把噪声数据误判成有效帧。 */
+        if (stream_buf[parse_pos + frame_len - 1U] == FRAME_TAIL)
+        {
+          /* usb_parse_command 负责做结构校验和校验和校验；通过后交给命令处理器。 */
+          if (usb_parse_command(&stream_buf[parse_pos], frame_len, &cmd, &data, &data_len))
+          {
+            usb_handle_command(cmd, data, data_len);
+          }
+
+          /* 这帧已经处理完，继续扫描后续数据。 */
+          parse_pos += frame_len;
+        }
+        else
+        {
+          /* 帧尾不匹配，说明当前位置不是合法帧头，向后移动 1 字节继续找。 */
+          parse_pos++;
+        }
+      }
+
+      /* 把未处理完的尾部残留前移，留给下一次 USB 包继续拼接。 */
+      if (parse_pos > 0U)
+      {
+        uint16_t remain = (uint16_t)(stream_len - parse_pos);
+        if (remain > 0U)
+        {
+          memmove(stream_buf, &stream_buf[parse_pos], remain);
+        }
+        stream_len = remain;
+      }
     }
-    osDelay(10);
   }
 }

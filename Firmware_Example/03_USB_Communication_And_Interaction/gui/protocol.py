@@ -1,30 +1,33 @@
 """
-XY 平台通信协议定义
+两个直线模组控制通信协议定义
 """
 
 import struct
 from enum import IntEnum
-from typing import Union, Tuple, List
+from typing import Tuple
 
 
 class CommandType(IntEnum):
     """命令类型枚举"""
     HOME = 0x01                # 回零
     MOVE_ABS = 0x02            # 绝对位移
-    MOVE_REL = 0x03            # 相对位移
-    LINE_INTERP = 0x04         # 直线插补
-    ARC_INTERP = 0x05          # 圆弧插补
+    SET_VELOCITY = 0x03        # 设置速度
     STOP = 0x06                # 停止
     QUERY_STATUS = 0x07        # 查询状态
-    STATUS_RESPONSE = 0xF0      # 状态响应
+    STATUS_RESPONSE = 0xF0     # 状态响应
+
+
+class ModuleID(IntEnum):
+    """模组ID"""
+    X_AXIS = 0x00              # X轴（第一个直线模组）
+    Y_AXIS = 0x01              # Y轴（第二个直线模组）
 
 
 class PlatformStatus(IntEnum):
     """平台状态"""
     IDLE = 0x00                # 空闲
     HOMING = 0x01              # 回零中
-    INTERPING = 0x02              # 插补中
-    MANUAL = 0x03              # 直接运动
+    MOVING = 0x02              # 运动中
     ERROR = 0xFF               # 错误
 
 
@@ -93,72 +96,63 @@ class CommandBuilder:
     """命令构建器"""
     
     @staticmethod
-    def home() -> bytes:
-        """构建回零命令"""
-        return ProtocolFrame().pack(CommandType.HOME, b'')
+    def home(axis: ModuleID) -> bytes:
+        """构建回零命令
+        
+        Args:
+            axis: 轴ID (X_AXIS or Y_AXIS)
+        """
+        data = bytes([axis])
+        return ProtocolFrame().pack(CommandType.HOME, data)
     
     @staticmethod
-    def move_abs(x: float, y: float, speed: int) -> bytes:
+    def move_abs(axis: ModuleID, position: float, speed: int) -> bytes:
         """构建绝对位移命令
         
         Args:
-            x: X 坐标 (mm)
-            y: Y 坐标 (mm)
+            axis: 轴ID
+            position: 目标位置 (mm)
             speed: 速度 (mm/s)
         """
-        data = struct.pack('<ffH', x, y, speed)
+        data = bytes([axis]) + struct.pack('<fH', position, int(round(speed)))
         return ProtocolFrame().pack(CommandType.MOVE_ABS, data)
     
     @staticmethod
-    def move_rel(dx: float, dy: float, speed: int) -> bytes:
-        """构建相对位移命令"""
-        data = struct.pack('<ffH', dx, dy, speed)
-        return ProtocolFrame().pack(CommandType.MOVE_REL, data)
-    
-    @staticmethod
-    def line_interp(x1: float, y1: float, x2: float, y2: float, speed: int) -> bytes:
-        """构建直线插补命令"""
-        data = struct.pack('<ffffH', x1, y1, x2, y2, speed)
-        return ProtocolFrame().pack(CommandType.LINE_INTERP, data)
-    
-    @staticmethod
-    def arc_interp(
-        xc: float,
-        yc: float,
-        radius: float,
-        angle_start: float,
-        angle_end: float,
-        clockwise: bool,
-        speed: int
-    ) -> bytes:
-        """构建圆弧插补命令
+    def set_velocity(axis: ModuleID, velocity: int) -> bytes:
+        """构建设置速度命令
         
         Args:
-            xc: 圆心 X 坐标
-            yc: 圆心 Y 坐标
-            radius: 半径
-            angle_start: 起始角度 (度)
-            angle_end: 终止角度 (度)
-            clockwise: 方向，True=顺时针，False=逆时针
-            speed: 速度
+            axis: 轴ID
+            velocity: 速度 (mm/s)
         """
-        data = struct.pack(
-            '<fffffBH',
-            xc, yc, radius, angle_start, angle_end,
-            1 if clockwise else 0,
-            speed
-        )
-        return ProtocolFrame().pack(CommandType.ARC_INTERP, data)
+        data = bytes([axis]) + struct.pack('<H', int(round(velocity)))
+        return ProtocolFrame().pack(CommandType.SET_VELOCITY, data)
     
     @staticmethod
-    def stop() -> bytes:
-        """构建停止命令"""
-        return ProtocolFrame().pack(CommandType.STOP, b'')
+    def stop(axis: ModuleID = None) -> bytes:
+        """构建停止命令
+        
+        Args:
+            axis: 轴ID，None表示停止所有轴
+        """
+        if axis is None:
+            data = bytes([0xFF])  # 特殊值表示停止所有
+        else:
+            data = bytes([axis])
+        return ProtocolFrame().pack(CommandType.STOP, data)
     
     @staticmethod
-    def query_status() -> bytes:
-        """构建状态查询命令"""
-        return ProtocolFrame().pack(CommandType.QUERY_STATUS, b'')
+    def query_status(axis: ModuleID = None) -> bytes:
+        """构建状态查询命令
+        
+        Args:
+            axis: 轴ID，None表示查询所有
+        """
+        if axis is None:
+            data = bytes([0xFF])
+        else:
+            data = bytes([axis])
+        return ProtocolFrame().pack(CommandType.QUERY_STATUS, data)
 
 
 class ResponseParser:
@@ -170,19 +164,29 @@ class ResponseParser:
         
         Returns:
             {
-                'x': 当前 X 坐标,
-                'y': 当前 Y 坐标,
-                'status': 平台状态,
+                'x_pos': X轴当前位置,
+                'y_pos': Y轴当前位置,
+                'x_status': X轴状态,
+                'y_status': Y轴状态,
+                'x_vel': X轴速度,
+                'y_vel': Y轴速度,
                 'error': 错误码
             }
         """
-        if len(data) < 10:
+        if len(data) < 20:
             raise ValueError(f"Invalid status data length: {len(data)}")
         
-        x, y, status, error = struct.unpack('<ffBB', data[:10])
+        # 格式: x_pos(4B) y_pos(4B) x_status(1B) y_status(1B) x_vel(2B) y_vel(2B) error(1B)
+        x_pos, y_pos, x_status, y_status, x_vel, y_vel, error = struct.unpack(
+            '<ffBBHHB', data[:19]
+        )
+        
         return {
-            'x': x,
-            'y': y,
-            'status': PlatformStatus(status),
+            'x_pos': x_pos,
+            'y_pos': y_pos,
+            'x_status': PlatformStatus(x_status),
+            'y_status': PlatformStatus(y_status),
+            'x_vel': x_vel,
+            'y_vel': y_vel,
             'error': error
         }

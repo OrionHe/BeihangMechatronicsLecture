@@ -47,8 +47,5 @@ x_linear_module::LinearModule g_linearModule[2] = {
         DIR_M2_Pin, nENBL_M2_GPIO_Port, nENBL_M2_Pin, SW3_GPIO_Port, SW3_Pin,
         SW4_GPIO_Port, SW4_Pin, 4.0f)};
 
-xy_platform::XYplatform g_xyPlatform(&g_linearModule[0], &g_linearModule[1],0.1f,
-                                     100.0f, 2.0f, 0.0f, 0.0f, 0.01f);
-
 
 /* ------------------------------ Functions ------------------------------ */
