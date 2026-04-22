@@ -108,7 +108,7 @@ void StartDebugTask(void *argument)
 //       g_linearModule[1].SetTargetVelocity(10.0f);
 //     }
     // g_xyPlatform.ControlLoop();
-    osDelay(1);
+    osDelay(10);
   }
 }
 

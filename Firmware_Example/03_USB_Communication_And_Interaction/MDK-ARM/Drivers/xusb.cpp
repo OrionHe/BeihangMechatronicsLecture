@@ -3,7 +3,7 @@
 #include "my_config.h"
 #include "usbd_cdc_if.h"
 
-#define HOME_SEARCH_VEL_MM_S 5.0f
+#define HOME_SEARCH_VEL_MM_S 10.0f
 
 /**
  * @brief  校验和计算（XOR）
@@ -185,8 +185,8 @@ void usb_handle_command(uint8_t cmd, uint8_t *data, uint8_t data_len)
                                             -g_linearModule[1].stepper.step_current_velocity);
                 uint8_t error_code = (x_status == STATUS_ERROR || y_status == STATUS_ERROR) ? 1U : 0U;
 
-                /* 与上位机协议保持一致，补 1 字节 reserved，data_len = 20 */
-                uint8_t response[20] = {0};
+                /* 状态响应有效载荷固定 15 字节 */
+                uint8_t response[15] = {0};
                 memcpy(&response[0], &x_pos, 4);
                 memcpy(&response[4], &y_pos, 4);
                 response[8] = x_status;
@@ -194,9 +194,8 @@ void usb_handle_command(uint8_t cmd, uint8_t *data, uint8_t data_len)
                 memcpy(&response[10], &x_vel, 2);
                 memcpy(&response[12], &y_vel, 2);
                 response[14] = error_code;
-                response[19] = 0U;
 
-                usb_send_response(CMD_STATUS_RESPONSE, response, 20);
+                usb_send_response(CMD_STATUS_RESPONSE, response, 15);
             }
             break;
         
