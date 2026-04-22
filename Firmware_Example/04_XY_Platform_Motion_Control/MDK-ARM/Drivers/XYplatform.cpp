@@ -196,6 +196,8 @@ void XYplatform::ControlLoop(void) {
           abs(this->y_real - this->y_interpolation_start) <= POSITION_ERROR_THRESHOLD) {
         // 已到达起始点，切换到线性插补模式
         this->mode = PLATFORM_MODE_LINEAR_INTERPOLATION;
+        this->x->SetMode(x_linear_module::MODULE_MODE_POSITION);
+        this->y->SetMode(x_linear_module::MODULE_MODE_POSITION);
         this->x_target = this->x_interpolation_final;
         this->y_target = this->y_interpolation_final;
         this->linear_waiting_start = false;
@@ -208,6 +210,8 @@ void XYplatform::ControlLoop(void) {
           abs(this->y_real - this->y_interpolation_start) <= POSITION_ERROR_THRESHOLD) {
         // 已到达起始点，切换到圆弧插补模式
         this->mode = PLATFORM_MODE_CIRCULAR_INTERPOLATION;
+        this->x->SetMode(x_linear_module::MODULE_MODE_POSITION);
+        this->y->SetMode(x_linear_module::MODULE_MODE_POSITION);
         this->x_target = this->x_interpolation_final;
         this->y_target = this->y_interpolation_final;
         this->circular_waiting_start = false;

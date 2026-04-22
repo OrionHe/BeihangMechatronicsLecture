@@ -97,6 +97,11 @@ namespace x_linear_module
     return (float)((float)(this->stepper.step_current_angle) * (float)(this->stepper.step_angle) * this->lead / this->stepper.step_division / 360.0f);
   }
 
+  void LinearMoudle::FindZero(void)
+  {
+    this->SetMode(MODULE_MODE_VELOCITY);
+    this->SetTargetVelocity(-10.0f);
+  }
   void LinearModule::ControlLoop(void)
   {
     // 限位检测
