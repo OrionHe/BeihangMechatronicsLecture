@@ -23,7 +23,8 @@ class PlatformStatus(IntEnum):
     """平台状态"""
     IDLE = 0x00                # 空闲
     HOMING = 0x01              # 回零中
-    MOVING = 0x02              # 运动中
+    INTERPING = 0x02              # 插补中
+    MANUAL = 0x03              # 直接运动
     ERROR = 0xFF               # 错误
 
 

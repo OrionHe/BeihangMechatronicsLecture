@@ -128,7 +128,8 @@ python3 main.py
 - **status** 枚举值:
   - 0x00: IDLE（空闲）
   - 0x01: HOMING（回零中）
-  - 0x02: MOVING（运动中）
+  - 0x02: INTERPING（插补中）
+  - 0x03: MANUAL（直接运动）
   - 0xFF: ERROR（错误）
 
 ## GUI 界面说明

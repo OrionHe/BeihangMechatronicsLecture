@@ -24,12 +24,13 @@ typedef enum {
     CMD_STATUS_RESPONSE = 0xF0    /* 状态响应 */
 } UsbCommandType_t;
 
-typedef enum {
-    STATUS_IDLE    = 0x00,
-    STATUS_HOMING  = 0x01,
-    STATUS_MOVING  = 0x02,
-    STATUS_ERROR   = 0xFF
-} PlatformStatus_t;
+// typedef enum {
+//     STATUS_IDLE    = 0x00,
+//     STATUS_HOMING  = 0x01,
+//     STATUS_INTERPING  = 0x02,
+//     STATUS_MANUAL  = 0x03,
+//     STATUS_ERROR   = 0xFF
+// } PlatformStatus_t;
 
 #define USB_RX_THREAD_FLAG_DATA (1UL << 0)
 

@@ -35,7 +35,8 @@ typedef enum {
 typedef enum {
     STATUS_IDLE    = 0x00,
     STATUS_HOMING  = 0x01,
-    STATUS_MOVING  = 0x02,
+    STATUS_INTERPING  = 0x02,
+    STATUS_MANUAL  = 0x03,
     STATUS_ERROR   = 0xFF
 } PlatformStatus_t;
 

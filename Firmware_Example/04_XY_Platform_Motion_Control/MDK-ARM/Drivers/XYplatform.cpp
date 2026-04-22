@@ -21,7 +21,7 @@
 /* ------------------------------ Defines ------------------------------ */
 
 #define abs(x) ((x) > 0 ? (x) : -(x))
-#define POSITION_ERROR_THRESHOLD 1e-2f
+#define POSITION_ERROR_THRESHOLD 0.01f
 #define DEG_TO_RAD 0.01745329251994329577f
 
 /* ------------------------------ variables ------------------------------ */
@@ -56,8 +56,8 @@ XYplatform::XYplatform(x_linear_module::LinearModule *x,
 }
 
 void XYplatform::MotionConfig(int8_t x_dir, int8_t y_dir, float max_vel,float acc) {
-  x->MotionConfig(x_dir, max_vel, acc);
-  y->MotionConfig(y_dir, max_vel, acc);
+  this->x->MotionConfig(x_dir, max_vel, acc);
+  this->y->MotionConfig(y_dir, max_vel, acc);
   this->max_vel = max_vel;
   this->acc = acc;
   this->x_dir = x_dir;
@@ -66,10 +66,10 @@ void XYplatform::MotionConfig(int8_t x_dir, int8_t y_dir, float max_vel,float ac
 
 void XYplatform::FindHome(void) {
   this->mode = PLATFORM_MODE_FIND_HOME;
-  x->SetMode(x_linear_module::MODULE_MODE_VELOCITY);
-  y->SetMode(x_linear_module::MODULE_MODE_VELOCITY);
-  x->SetTargetVelocity(-10.0f);
-  y->SetTargetVelocity(-10.0f);
+  this->x->SetMode(x_linear_module::MODULE_MODE_VELOCITY);
+  this->y->SetMode(x_linear_module::MODULE_MODE_VELOCITY);
+  this->x->SetTargetVelocity(-10.0f);
+  this->y->SetTargetVelocity(-10.0f);
 }
 
 void XYplatform::MoveTo(float x, float y) {
@@ -79,6 +79,8 @@ void XYplatform::MoveTo(float x, float y) {
 void XYplatform::MoveTo(float x, float y, float vel) {
   // 设置模式为手动模式
   this->mode = PLATFORM_MODE_MANUAL;
+  this->x_target = x;
+  this->y_target = y;
 
   // 在位置模式下，底层会根据目标位置自动决定方向，这里只传速度幅值。
   float dx = x - this->x_real;
@@ -147,8 +149,8 @@ void XYplatform::CircularInterpolation(float center_x, float center_y,float radi
   this->y_interpolation_start = y_start;
   this->x_interpolation_target = x_start;
   this->y_interpolation_target = y_start;
-	this->x_center=center_x;
-	this->y_center=center_y;
+  this->x_center = center_x;
+  this->y_center = center_y;
   // 设置插补目标位置
   this->x_interpolation_final = center_x + radius * arm_cos_f32(angle_end*DEG_TO_RAD);
   this->y_interpolation_final = center_y + radius * arm_sin_f32(angle_end*DEG_TO_RAD);
@@ -188,7 +190,11 @@ void XYplatform::ControlLoop(void) {
   // 根据模式进行不同的控制
   if (this->mode == PLATFORM_MODE_IDLE) {
   } 
-	else if (this->mode == PLATFORM_MODE_MANUAL) {
+  else if (this->mode == PLATFORM_MODE_MANUAL) {
+    if (abs(this->x_real - this->x_target) <= POSITION_ERROR_THRESHOLD &&
+        abs(this->y_real - this->y_target) <= POSITION_ERROR_THRESHOLD) {
+      this->mode =PLATFORM_MODE_IDLE;
+    }
     // 检查是否在等待线性插补启动
     if (this->linear_waiting_start) {
       // 检查是否已到达起始点
@@ -217,37 +223,40 @@ void XYplatform::ControlLoop(void) {
         this->circular_waiting_start = false;
       }
     }
+
   }
   else if (this->mode == PLATFORM_MODE_FIND_HOME) {
     if (abs(this->x_real) <= POSITION_ERROR_THRESHOLD &&
-        abs(this->y_real) <= POSITION_ERROR_THRESHOLD) {
-      this->mode = PLATFORM_MODE_MANUAL;
+        abs(this->y_real) <= POSITION_ERROR_THRESHOLD&&
+        this->x->mode == x_linear_module::MODULE_MODE_POSITION &&
+        this->y->mode == x_linear_module::MODULE_MODE_POSITION) {
+      this->mode = PLATFORM_MODE_IDLE;
     }
   } 
-	else if (this->mode == PLATFORM_MODE_LINEAR_INTERPOLATION) {
+  else if (this->mode == PLATFORM_MODE_LINEAR_INTERPOLATION) {
     // 检查是否到达目标位置
     if (abs(this->x_real - this->x_target) <= POSITION_ERROR_THRESHOLD &&
         abs(this->y_real - this->y_target) <= POSITION_ERROR_THRESHOLD) {
-      this->mode = PLATFORM_MODE_MANUAL;
+      this->mode =PLATFORM_MODE_IDLE;
     }
-    //对水平/垂直直线做专门处理，避免 f==0 时插补轴不推进
-    else if (this->y_target - this->y_interpolation_start==0) {
-      // 水平线：只推进 X，Y 保持常量
+    // //对水平/垂直直线做专门处理，避免 f==0 时插补轴不推进
+    else if (abs(this->y_target - this->y_real)<= POSITION_ERROR_THRESHOLD) {
+       // 水平线：只推进 X，Y 保持常量
       if (abs(this->x_target - this->x_interpolation_target) <= this->inter_step) {
         this->x_interpolation_target = this->x_target;
       } else {
-         this->x_interpolation_target = this->x_real +((this->x_target >= this->x_interpolation_start) ? this->inter_step : -this->inter_step);
+        this->x_interpolation_target = this->x_real +((this->x_target >= this->x_interpolation_start) ? this->inter_step : -this->inter_step);
       }
     }
-    else if (this->x_target - this->x_interpolation_start==0) {
-      // 垂直线：只推进 Y，X 保持常量
+    else if (abs(this->x_target - this->x_real)<= POSITION_ERROR_THRESHOLD) {
+       // 垂直线：只推进 Y，X 保持常量
       if (abs(this->y_target - this->y_interpolation_target) <= this->inter_step) {
         this->y_interpolation_target = this->y_target;
       } else {
         this->y_interpolation_target = this->y_real+((this->y_target >= this->y_interpolation_start) ? this->inter_step : -this->inter_step);
       }
     }
-    // 计算插补目标位置
+     //计算插补目标位置
     else if (this->x_target - this->x_real >0 &&this->y_target - this->y_real > 0) {
       // 第一象限
       if (LinearInterJudge(this->x_real, this->y_real, this->x_target,this->y_target, this->x_interpolation_start,this->y_interpolation_start) >= 0) {
@@ -266,7 +275,7 @@ void XYplatform::ControlLoop(void) {
         }
       }
     }
-    else if (this->x_target - this->x_real < 0 &&this->y_target - this->y_real >0) {
+    else if (this->x_target - this->x_real <0 &&this->y_target - this->y_real >0) {
       // 第二象限
       if (LinearInterJudge(this->x_real, this->y_real, this->x_target,this->y_target, this->x_interpolation_start,this->y_interpolation_start) >= 0) {
         // 是否可以一步完成
@@ -301,7 +310,7 @@ void XYplatform::ControlLoop(void) {
           this->y_interpolation_target = this->y_real - this->inter_step;
         }
       }
-    } else if (this->x_target - this->x_real > 0 &&this->y_target - this->y_real <0) {
+    } else if (this->x_target - this->x_real >0 &&this->y_target - this->y_real <0) {
       // 第四象限
       if (LinearInterJudge(this->x_real, this->y_real, this->x_target,this->y_target, this->x_interpolation_start,this->y_interpolation_start) >= 0) {
         // 是否可以一步完成
@@ -324,46 +333,33 @@ void XYplatform::ControlLoop(void) {
     this->x->SetTargetPositionWithVelocity(this->x_interpolation_target,this->inter_vel);
     this->y->SetTargetPositionWithVelocity(this->y_interpolation_target,this->inter_vel);
   } 
-	else if (this->mode == PLATFORM_MODE_CIRCULAR_INTERPOLATION) {
+  else if (this->mode == PLATFORM_MODE_CIRCULAR_INTERPOLATION) {
      // 检查是否到达目标位置
     if (abs(this->x_real - this->x_target) <= POSITION_ERROR_THRESHOLD &&abs(this->y_real - this->y_target) <= POSITION_ERROR_THRESHOLD) {
-      this->mode = PLATFORM_MODE_MANUAL;
+      this->mode = PLATFORM_MODE_IDLE;
     }   
-    else if ( this->x_real-this->x_center > 0 &&this->y_real-this->y_center >= 0) {
+    else if (abs(this->x_target - this->x_interpolation_target) <=this->inter_step&&abs(this->y_target - this->y_interpolation_target) <=this->inter_step)
+    {
+      this->x_interpolation_target = this->x_target;
+      this->y_interpolation_target = this->y_target;
+    }
+    else if ( this->x_real-this->x_center > 0 &&this->y_real-this->y_center >=0) {
       // 第一象限
       if (CircularInterJudge(this->x_real, this->y_real, this->x_center,this->y_center, this->radius) >= 0) 
       {
         if (this->clockwise) {
-          if (abs(this->y_target - this->y_interpolation_target) <=this->inter_step&&abs(this->x_target - this->x_interpolation_target) <=this->inter_step) {
-            this->y_interpolation_target = this->y_target;
-          } 
-          else {
-            this->y_interpolation_target = this->y_real - this->inter_step;
-          }
+          this->y_interpolation_target = this->y_real - this->inter_step;
         } 
         else {
-          if(abs(this->x_target - this->x_interpolation_target) <=this->inter_step&&abs(this->y_target - this->y_interpolation_target) <=this->inter_step) {
-            this->x_interpolation_target = this->x_target;
-          } else {
-            this->x_interpolation_target = this->x_real - this->inter_step;
-          }
+          this->x_interpolation_target = this->x_real - this->inter_step; 
         }
       } 
       else {
         if (this->clockwise) {
-          if (abs(this->x_target - this->x_interpolation_target) <=this->inter_step&&abs(this->y_target - this->y_interpolation_target) <=this->inter_step) {
-            this->x_interpolation_target = this->x_target;
-          } 
-          else {
-            this->x_interpolation_target = this->x_real + this->inter_step;
-          }
+          this->x_interpolation_target = this->x_real + this->inter_step;
         } 
         else {
-          if(abs(this->y_target - this->y_interpolation_target) <=this->inter_step&&abs(this->x_target - this->x_interpolation_target) <=this->inter_step) {
-            this->y_interpolation_target = this->y_target;
-          } else {
-            this->y_interpolation_target = this->y_real + this->inter_step;
-          }
+          this->y_interpolation_target = this->y_real + this->inter_step;
         }
       }
     }
@@ -372,36 +368,18 @@ void XYplatform::ControlLoop(void) {
       if (CircularInterJudge(this->x_real, this->y_real, this->x_center,this->y_center, this->radius) >= 0) 
       {
         if (this->clockwise) {
-          if (abs(this->x_target - this->x_interpolation_target) <=this->inter_step&&abs(this->y_target - this->y_interpolation_target) <=this->inter_step) {
-            this->x_interpolation_target = this->x_target;
-          } 
-          else {
-            this->x_interpolation_target = this->x_real + this->inter_step;
-          }
+          this->x_interpolation_target = this->x_real + this->inter_step;
         } 
         else {
-          if(abs(this->y_target - this->y_interpolation_target) <=this->inter_step&&abs(this->x_target - this->x_interpolation_target) <=this->inter_step) {
-            this->y_interpolation_target = this->y_target;
-          } else {
-            this->y_interpolation_target = this->y_real - this->inter_step;
-          }
+          this->y_interpolation_target = this->y_real - this->inter_step;
         }
       } 
       else {
         if (this->clockwise) {
-          if (abs(this->y_target - this->y_interpolation_target) <=this->inter_step&&abs(this->x_target - this->x_interpolation_target) <=this->inter_step) {
-            this->y_interpolation_target = this->y_target;
-          } 
-          else {
-            this->y_interpolation_target = this->y_real + this->inter_step;
-          }
+          this->y_interpolation_target = this->y_real + this->inter_step;
         } 
         else {
-          if(abs(this->x_target - this->x_interpolation_target) <=this->inter_step&&abs(this->y_target - this->y_interpolation_target) <=this->inter_step) {
-            this->x_interpolation_target = this->x_target;
-          } else {
             this->x_interpolation_target = this->x_real - this->inter_step;
-          }
         }
       }
     }
@@ -410,36 +388,18 @@ void XYplatform::ControlLoop(void) {
       if (CircularInterJudge(this->x_real, this->y_real, this->x_center,this->y_center, this->radius) >= 0) 
       {
         if (this->clockwise) {
-          if (abs(this->y_target - this->y_interpolation_target) <=this->inter_step&&abs(this->x_target - this->x_interpolation_target) <=this->inter_step) {
-            this->y_interpolation_target = this->y_target;
-          } 
-          else {
-            this->y_interpolation_target = this->y_real + this->inter_step;
-          }
+          this->y_interpolation_target = this->y_real + this->inter_step;
         } 
         else {
-          if(abs(this->x_target - this->x_interpolation_target) <=this->inter_step&&abs(this->y_target - this->y_interpolation_target) <=this->inter_step) {
-            this->x_interpolation_target = this->x_target;
-          } else {
             this->x_interpolation_target = this->x_real + this->inter_step;
-          }
         }
       } 
       else {
-        if (this->clockwise) {
-          if (abs(this->x_target - this->x_interpolation_target) <=this->inter_step&&abs(this->y_target - this->y_interpolation_target) <=this->inter_step) {
-            this->x_interpolation_target = this->x_target;
-          } 
-          else {
-            this->x_interpolation_target = this->x_real - this->inter_step;
-          }
+        if (this->clockwise) { 
+          this->x_interpolation_target = this->x_real - this->inter_step;
         } 
         else {
-          if(abs(this->y_target - this->y_interpolation_target) <=this->inter_step&&abs(this->x_target - this->x_interpolation_target) <=this->inter_step) {
-            this->y_interpolation_target = this->y_target;
-          } else {
-            this->y_interpolation_target = this->y_real - this->inter_step;
-          }
+          this->y_interpolation_target = this->y_real - this->inter_step;
         }
       }
     }
@@ -447,37 +407,19 @@ void XYplatform::ControlLoop(void) {
       // 第四象限
       if (CircularInterJudge(this->x_real, this->y_real, this->x_center,this->y_center, this->radius) >= 0) 
       {
-        if (this->clockwise) {
-          if (abs(this->x_target - this->x_interpolation_target) <=this->inter_step&&abs(this->y_target - this->y_interpolation_target) <=this->inter_step) {
-            this->x_interpolation_target = this->x_target;
-          } 
-          else {
-            this->x_interpolation_target = this->x_real - this->inter_step;
-          }
+        if (this->clockwise) {     
+          this->x_interpolation_target = this->x_real - this->inter_step; 
         } 
         else {
-          if(abs(this->y_target - this->y_interpolation_target) <=this->inter_step&&abs(this->x_target - this->x_interpolation_target) <=this->inter_step) {
-            this->y_interpolation_target = this->y_target;    
-          } else {
-            this->y_interpolation_target = this->y_real + this->inter_step;
-          }
+          this->y_interpolation_target = this->y_real + this->inter_step;
         }         
       }
       else {
         if (this->clockwise) {
-          if (abs(this->y_target - this->y_interpolation_target) <=this->inter_step&&abs(this->x_target - this->x_interpolation_target) <=this->inter_step) {
-            this->y_interpolation_target = this->y_target;
-          } 
-          else {
-            this->y_interpolation_target = this->y_real - this->inter_step;
-          }
+          this->y_interpolation_target = this->y_real - this->inter_step;
         } 
         else {
-          if(abs(this->x_target - this->x_interpolation_target) <=this->inter_step&&abs(this->y_target - this->y_interpolation_target) <=this->inter_step) {
-            this->x_interpolation_target = this->x_target;
-          } else {
             this->x_interpolation_target = this->x_real + this->inter_step;
-          }
         }
       }
     }
@@ -535,7 +477,12 @@ void XYplatform::GetStatus(float *curr_x, float *curr_y, uint8_t *status) {
       *status = 0x01;
     } else if (this->mode == PLATFORM_MODE_LINEAR_INTERPOLATION ||this->mode == PLATFORM_MODE_CIRCULAR_INTERPOLATION ||this->mode == PLATFORM_MODE_CLOSED_LOOP) {
       *status = 0x02;
-    } else {
+    } 
+    else if(this->mode==PLATFORM_MODE_MANUAL)
+    {
+      *status=0x03;
+    }
+    else {
       *status = 0x00;
     }
   }

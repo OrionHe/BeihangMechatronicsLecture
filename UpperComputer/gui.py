@@ -694,8 +694,9 @@ class MainWindow(QMainWindow):
         status_text = {
             PlatformStatus.IDLE: "空闲",
             PlatformStatus.HOMING: "回零中",
-            PlatformStatus.MOVING: "运动中",
-            PlatformStatus.ERROR: "错误"
+            PlatformStatus.INTERPING: "插补中",
+            PlatformStatus.ERROR: "错误",
+            PlatformStatus.MANUAL: "直接运动"
         }.get(status, "未知")
         
         self.platform_status_display.setText(status_text)
@@ -703,7 +704,7 @@ class MainWindow(QMainWindow):
         # 更新指示灯
         if status == PlatformStatus.IDLE:
             self.status_indicator.setText("●")
-        elif status == PlatformStatus.MOVING or status == PlatformStatus.HOMING:
+        elif status == PlatformStatus.INTERPING or status == PlatformStatus.HOMING or status == PlatformStatus.MANUAL:
             self.status_indicator.setText("◐")
         else:
             self.status_indicator.setText("■")

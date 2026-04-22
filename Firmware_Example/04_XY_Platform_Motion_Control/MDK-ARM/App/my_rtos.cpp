@@ -53,7 +53,56 @@ void My_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     // g_xyPlatform.ControlLoop();
   }
 }
-
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  osDelay(20);
+  if (GPIO_Pin==g_xyPlatform.x->limit_switch1_pin)
+    {
+      if (HAL_GPIO_ReadPin(g_xyPlatform.x->limit_switch1_port, g_xyPlatform.x->limit_switch1_pin) == GPIO_PIN_RESET)
+      {
+        if (g_xyPlatform.x->mode != x_linear_module::MODULE_MODE_POSITION)
+        {
+          // Handle limit switch trigger
+          g_xyPlatform.x->SetMode(x_linear_module::MODULE_MODE_POSITION);
+          g_xyPlatform.x->SetPosition(-10);
+          g_xyPlatform.x->SetTargetPosition(0);
+          g_xyPlatform.x->SetTargetVelocityHard(0);
+        }
+      }
+    }
+    else if (GPIO_Pin == g_xyPlatform.x->limit_switch2_pin)
+    {
+      if (HAL_GPIO_ReadPin(g_xyPlatform.x->limit_switch2_port, g_xyPlatform.x->limit_switch2_pin) == GPIO_PIN_RESET)
+        {
+          // Handle limit switch trigger
+          g_xyPlatform.x->SetMode(x_linear_module::MODULE_MODE_ERROR);
+          g_xyPlatform.x->SetTargetVelocityHard(0);
+        }
+    }
+    else if (GPIO_Pin == g_xyPlatform.y->limit_switch1_pin)
+    {
+      if (HAL_GPIO_ReadPin(g_xyPlatform.y->limit_switch1_port, g_xyPlatform.y->limit_switch1_pin) == GPIO_PIN_RESET)
+      {
+        if (g_xyPlatform.y->mode != x_linear_module::MODULE_MODE_POSITION)
+        {
+          // Handle limit switch trigger
+          g_xyPlatform.y->SetMode(x_linear_module::MODULE_MODE_POSITION);
+          g_xyPlatform.y->SetPosition(-10);
+          g_xyPlatform.y->SetTargetPosition(0);
+          g_xyPlatform.y->SetTargetVelocityHard(0);
+        }
+      }
+    }
+    else if (GPIO_Pin == g_xyPlatform.y->limit_switch2_pin)
+    {
+      if (HAL_GPIO_ReadPin(g_xyPlatform.y->limit_switch2_port, g_xyPlatform.y->limit_switch2_pin  ) == GPIO_PIN_RESET)
+      {
+        // Handle limit switch trigger
+        g_xyPlatform.y->SetMode(x_linear_module::MODULE_MODE_ERROR);
+        g_xyPlatform.y->SetTargetVelocityHard(0);
+      }
+    }
+}
 /* ------------------------------ Tasks ------------------------------ */
 
 /**

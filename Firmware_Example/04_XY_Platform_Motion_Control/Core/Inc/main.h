@@ -60,10 +60,13 @@ void Error_Handler(void);
 #define STIM_FREQ 1000000.0f
 #define SW2_Pin GPIO_PIN_2
 #define SW2_GPIO_Port GPIOE
+#define SW2_EXTI_IRQn EXTI2_IRQn
 #define SW3_Pin GPIO_PIN_3
 #define SW3_GPIO_Port GPIOE
+#define SW3_EXTI_IRQn EXTI3_IRQn
 #define SW4_Pin GPIO_PIN_4
 #define SW4_GPIO_Port GPIOE
+#define SW4_EXTI_IRQn EXTI4_IRQn
 #define DIR_M3_Pin GPIO_PIN_12
 #define DIR_M3_GPIO_Port GPIOD
 #define nENBL_M3_Pin GPIO_PIN_14
@@ -94,6 +97,7 @@ void Error_Handler(void);
 #define KEY1_GPIO_Port GPIOD
 #define SW1_Pin GPIO_PIN_1
 #define SW1_GPIO_Port GPIOE
+#define SW1_EXTI_IRQn EXTI1_IRQn
 
 /* USER CODE BEGIN Private defines */
 
