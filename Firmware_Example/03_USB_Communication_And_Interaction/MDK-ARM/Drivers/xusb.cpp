@@ -116,8 +116,7 @@ void usb_handle_command(uint8_t cmd, uint8_t *data, uint8_t data_len)
     };
 
     auto step_vel_to_mm_s = [](const x_linear_module::LinearModule &m) -> float {
-        float step_vel = (float)((m.stepper.step_current_velocity >= 0) ?
-                         m.stepper.step_current_velocity : -m.stepper.step_current_velocity);
+        float step_vel =  m.stepper.step_current_velocity ;
         return step_vel * m.lead * m.stepper.step_angle /
                (m.stepper.step_division * 360.0f);
     };

@@ -422,9 +422,29 @@ class MainWindow(QMainWindow):
         layout.addWidget(QLabel("Y 速度:"), 4, 0)
         self.y_vel_label = QLabel("0.0 mm/s")
         layout.addWidget(self.y_vel_label, 4, 1, 1, 2)
+
+        # X 轴状态
+        layout.addWidget(QLabel("X 状态:"), 5, 0)
+        self.x_status_label = QLabel("IDLE")
+        layout.addWidget(self.x_status_label, 5, 1, 1, 2)
+
+        # Y 轴状态
+        layout.addWidget(QLabel("Y 状态:"), 6, 0)
+        self.y_status_label = QLabel("IDLE")
+        layout.addWidget(self.y_status_label, 6, 1, 1, 2)
         
         group.setLayout(layout)
         return group
+
+    def format_platform_status(self, status: PlatformStatus) -> tuple[str, str]:
+        """返回状态文本和对应颜色"""
+        if status == PlatformStatus.HOMING:
+            return "HOMING", "#FB8C00"
+        if status == PlatformStatus.MOVING:
+            return "MOVING", "#1E88E5"
+        if status == PlatformStatus.ERROR:
+            return "ERROR", "#E53935"
+        return "IDLE", "#43A047"
     
     def create_basic_control_group(self) -> QGroupBox:
         """基础电机控制组"""
@@ -610,6 +630,12 @@ class MainWindow(QMainWindow):
         # 更新标签
         self.x_pos_label.setText(f"{status_info['x_pos']:.2f} mm")
         self.y_pos_label.setText(f"{status_info['y_pos']:.2f} mm")
+        x_status_text, x_status_color = self.format_platform_status(status_info['x_status'])
+        y_status_text, y_status_color = self.format_platform_status(status_info['y_status'])
+        self.x_status_label.setText(x_status_text)
+        self.y_status_label.setText(y_status_text)
+        self.x_status_label.setStyleSheet(f"color: {x_status_color}; font-weight: bold;")
+        self.y_status_label.setStyleSheet(f"color: {y_status_color}; font-weight: bold;")
         self.x_vel_label.setText(f"{status_info['x_vel']:.1f} mm/s")
         self.y_vel_label.setText(f"{status_info['y_vel']:.1f} mm/s")
         

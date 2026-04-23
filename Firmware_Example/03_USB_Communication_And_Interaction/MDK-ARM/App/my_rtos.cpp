@@ -55,32 +55,10 @@ void My_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
   osDelay(20);
-  if (GPIO_Pin==  g_linearModule[0].limit_switch1_pin)
+
+  if (GPIO_Pin ==  g_linearModule[1].limit_switch1_pin)
   {
-    //x轴回零边界
-    if (HAL_GPIO_ReadPin( g_linearModule[0].limit_switch1_port,  g_linearModule[0].limit_switch1_pin) == GPIO_PIN_RESET)
-    {
-      if (g_linearModule[0].mode != x_linear_module::MODULE_MODE_POSITION)
-      {
-           g_linearModule[0].SetMode(x_linear_module::MODULE_MODE_POSITION);
-           g_linearModule[0].SetPosition(-10);
-           g_linearModule[0].SetTargetPosition(0);
-           g_linearModule[0].SetTargetVelocityHard(0);
-      }
-    }
-  }
-  else if (GPIO_Pin ==  g_linearModule[0].limit_switch2_pin)
-  {
-    //x轴上限边界，对应错误状态
-    if (HAL_GPIO_ReadPin( g_linearModule[0].limit_switch2_port,  g_linearModule[0].limit_switch2_pin) == GPIO_PIN_RESET)
-    {
-       g_linearModule[0].SetMode(x_linear_module::MODULE_MODE_ERROR);
-       g_linearModule[0].SetTargetVelocityHard(0);
-    }
-  }
-  else if (GPIO_Pin ==  g_linearModule[1].limit_switch1_pin)
-  {
-    if (HAL_GPIO_ReadPin(g_linearModule[1].limit_switch1_port, g_linearModule[1].limit_switch1_pin) == GPIO_PIN_RESET)
+    if (HAL_GPIO_ReadPin(g_linearModule[1].limit_switch1_port, g_linearModule[1].limit_switch1_pin) == GPIO_PIN_SET)
     {
       //y轴回零边界
       if (g_linearModule[1].mode != x_linear_module::MODULE_MODE_POSITION)
@@ -95,11 +73,34 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
   else if (GPIO_Pin == g_linearModule[1].limit_switch2_pin)
   {
     //y轴上限边界，对应错误状态
-    if (HAL_GPIO_ReadPin(g_linearModule[1].limit_switch2_port, g_linearModule[1].limit_switch2_pin  ) == GPIO_PIN_RESET)
+    if (HAL_GPIO_ReadPin(g_linearModule[1].limit_switch2_port, g_linearModule[1].limit_switch2_pin  ) == GPIO_PIN_SET)
     {
         // Handle limit switch trigger
         g_linearModule[1].SetMode(x_linear_module::MODULE_MODE_ERROR);
         g_linearModule[1].SetTargetVelocityHard(0);
+    }
+  }
+  else if (GPIO_Pin==  g_linearModule[0].limit_switch1_pin)
+  {
+    //x轴回零边界
+    if (HAL_GPIO_ReadPin( g_linearModule[0].limit_switch1_port,  g_linearModule[0].limit_switch1_pin) == GPIO_PIN_SET)
+    {
+      if (g_linearModule[0].mode != x_linear_module::MODULE_MODE_POSITION)
+      {
+           g_linearModule[0].SetMode(x_linear_module::MODULE_MODE_POSITION);
+           g_linearModule[0].SetPosition(-10);
+           g_linearModule[0].SetTargetPosition(0);
+           g_linearModule[0].SetTargetVelocityHard(0);
+      }
+    }
+  }
+	else if (GPIO_Pin ==  g_linearModule[0].limit_switch2_pin)
+  {
+    //x轴上限边界，对应错误状态
+    if (HAL_GPIO_ReadPin( g_linearModule[0].limit_switch2_port,  g_linearModule[0].limit_switch2_pin) == GPIO_PIN_SET)
+    {
+       g_linearModule[0].SetMode(x_linear_module::MODULE_MODE_ERROR);
+       g_linearModule[0].SetTargetVelocityHard(0);
     }
   }
 }
