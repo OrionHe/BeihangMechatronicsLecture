@@ -25,9 +25,9 @@
 /* ------------------------------ Variables ------------------------------ */
 
 xkey::Key g_key[4] = {xkey::Key(KEY1_GPIO_Port, KEY1_Pin, GPIO_PIN_RESET),
-                      xkey::Key(KEY2_GPIO_Port, KEY2_Pin, GPIO_PIN_RESET),
-                      xkey::Key(KEY3_GPIO_Port, KEY3_Pin, GPIO_PIN_RESET),
-                      xkey::Key(KEY4_GPIO_Port, KEY4_Pin, GPIO_PIN_RESET)};
+                    xkey::Key(KEY2_GPIO_Port, KEY2_Pin, GPIO_PIN_RESET),
+                    xkey::Key(KEY3_GPIO_Port, KEY3_Pin, GPIO_PIN_RESET),
+                    xkey::Key(KEY4_GPIO_Port, KEY4_Pin, GPIO_PIN_RESET)};
 
 // xstepper::Stepper g_stepper[3] = {
 //     xstepper::Stepper(&htim8, TIM_CHANNEL_4, STIM_FREQ, 1.8f, 32,

@@ -131,3 +131,4 @@ uint32_t USB_CDC_RxDropCount(void);
 #endif
 
 #endif /* __USBD_CDC_IF_H__ */
+
