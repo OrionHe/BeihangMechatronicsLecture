@@ -161,6 +161,8 @@ namespace xstepper
     // 判断是否到达目标位置
     if (this->step_current_angle == this->step_target_angle)
     {
+      this->step_target_velocity = 0;
+      this->step_current_velocity = 0;
       return 0;
     }
 
