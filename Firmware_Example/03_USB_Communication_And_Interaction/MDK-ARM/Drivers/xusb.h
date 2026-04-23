@@ -25,7 +25,7 @@ typedef enum {
     CMD_SET_VELOCITY    = 0x03,   /* [axis_id][velocity(uint16,2B)] */
     CMD_STOP            = 0x06,   /* [axis_id] */
     CMD_QUERY_STATUS    = 0x07,   /* [axis_id] */
-    CMD_STATUS_RESPONSE = 0xF0    /* [x_pos(4B)][y_pos(4B)][x_status(1B)][y_status(1B)][x_vel(2B)][y_vel(2B)][error(1B)] */
+    CMD_STATUS_RESPONSE = 0xF0    /* [x_pos(4B)][y_pos(4B)][x_status(1B)][y_status(1B)][x_vel_mm_s(float,4B)][y_vel_mm_s(float,4B)][error(1B)] */
 } UsbCommandType_t;
 
 typedef enum {

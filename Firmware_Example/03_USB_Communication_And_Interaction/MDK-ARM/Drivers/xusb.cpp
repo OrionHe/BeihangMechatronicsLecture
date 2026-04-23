@@ -5,6 +5,8 @@
 
 #define HOME_SEARCH_VEL_MM_S 10.0f
 
+static bool s_axis_homing[2] = {false, false};
+
 /**
  * @brief  校验和计算（XOR）
  */
@@ -104,6 +106,45 @@ void usb_handle_command(uint8_t cmd, uint8_t *data, uint8_t data_len)
         m.SetTargetVelocityHard(0.0f);
     };
 
+    auto set_homing_flag = [](uint8_t id, bool homing) {
+        if (id == AXIS_X || id == AXIS_ALL) {
+            s_axis_homing[0] = homing;
+        }
+        if (id == AXIS_Y || id == AXIS_ALL) {
+            s_axis_homing[1] = homing;
+        }
+    };
+
+    auto step_vel_to_mm_s = [](const x_linear_module::LinearModule &m) -> float {
+        float step_vel = (float)((m.stepper.step_current_velocity >= 0) ?
+                         m.stepper.step_current_velocity : -m.stepper.step_current_velocity);
+        return step_vel * m.lead * m.stepper.step_angle /
+               (m.stepper.step_division * 360.0f);
+    };
+
+    auto get_axis_status = [](x_linear_module::LinearModule &m, bool &homing_flag) -> uint8_t {
+        if (m.mode == x_linear_module::MODULE_MODE_ERROR) {
+            homing_flag = false;
+            return STATUS_ERROR;
+        }
+
+        if (homing_flag) {
+            if ((m.mode == x_linear_module::MODULE_MODE_POSITION) &&
+                (m.stepper.step_current_velocity == 0)) {
+                homing_flag = false;
+                return STATUS_IDLE;
+            }
+            return STATUS_HOMING;
+        }
+
+        if ((m.mode == x_linear_module::MODULE_MODE_POSITION) &&
+            (m.stepper.step_current_velocity == 0)) {
+            return STATUS_IDLE;
+        }
+
+        return (m.stepper.step_current_velocity != 0) ? STATUS_MOVING : STATUS_IDLE;
+    };
+
     if (!is_axis_valid(axis_id)) {
         return;
     }
@@ -118,6 +159,7 @@ void usb_handle_command(uint8_t cmd, uint8_t *data, uint8_t data_len)
             if (axis_id == AXIS_Y || axis_id == AXIS_ALL) {
                 home_axis(g_linearModule[1]);
             }
+            set_homing_flag(axis_id, true);
             break;
         
         case CMD_MOVE_ABS:
@@ -135,6 +177,7 @@ void usb_handle_command(uint8_t cmd, uint8_t *data, uint8_t data_len)
                     g_linearModule[1].SetMode(x_linear_module::MODULE_MODE_POSITION);
                     g_linearModule[1].SetTargetPositionWithVelocity(position, (float)speed);
                 }
+                set_homing_flag(axis_id, false);
             }
             break;
         
@@ -151,6 +194,7 @@ void usb_handle_command(uint8_t cmd, uint8_t *data, uint8_t data_len)
                     g_linearModule[1].SetMode(x_linear_module::MODULE_MODE_VELOCITY);
                     g_linearModule[1].SetTargetVelocity((float)velocity);
                 }
+                set_homing_flag(axis_id, false);
             }
             break;
         
@@ -162,6 +206,7 @@ void usb_handle_command(uint8_t cmd, uint8_t *data, uint8_t data_len)
             if (axis_id == AXIS_Y || axis_id == AXIS_ALL) {
                 stop_axis(g_linearModule[1]);
             }
+            set_homing_flag(axis_id, false);
             break;
         
         case CMD_QUERY_STATUS:
@@ -169,33 +214,23 @@ void usb_handle_command(uint8_t cmd, uint8_t *data, uint8_t data_len)
             {
                 float x_pos = g_linearModule[0].GetPosition();
                 float y_pos = g_linearModule[1].GetPosition();
-                uint8_t x_status = (g_linearModule[0].mode == x_linear_module::MODULE_MODE_ERROR) ? STATUS_ERROR :
-                                   (g_linearModule[0].mode == x_linear_module::MODULE_MODE_POSITION &&
-                                    g_linearModule[0].stepper.step_current_velocity == 0) ? STATUS_IDLE :
-                                   (g_linearModule[0].stepper.step_current_velocity != 0) ? STATUS_MOVING : STATUS_IDLE;
-                uint8_t y_status = (g_linearModule[1].mode == x_linear_module::MODULE_MODE_ERROR) ? STATUS_ERROR :
-                                   (g_linearModule[1].mode == x_linear_module::MODULE_MODE_POSITION &&
-                                    g_linearModule[1].stepper.step_current_velocity == 0) ? STATUS_IDLE :
-                                   (g_linearModule[1].stepper.step_current_velocity != 0) ? STATUS_MOVING : STATUS_IDLE;
-                uint16_t x_vel = (uint16_t)((g_linearModule[0].stepper.step_current_velocity >= 0) ?
-                                             g_linearModule[0].stepper.step_current_velocity :
-                                            -g_linearModule[0].stepper.step_current_velocity);
-                uint16_t y_vel = (uint16_t)((g_linearModule[1].stepper.step_current_velocity >= 0) ?
-                                             g_linearModule[1].stepper.step_current_velocity :
-                                            -g_linearModule[1].stepper.step_current_velocity);
+                uint8_t x_status = get_axis_status(g_linearModule[0], s_axis_homing[0]);
+                uint8_t y_status = get_axis_status(g_linearModule[1], s_axis_homing[1]);
+                float x_vel = step_vel_to_mm_s(g_linearModule[0]);
+                float y_vel = step_vel_to_mm_s(g_linearModule[1]);
                 uint8_t error_code = (x_status == STATUS_ERROR || y_status == STATUS_ERROR) ? 1U : 0U;
 
-                /* 状态响应有效载荷固定 15 字节 */
-                uint8_t response[15] = {0};
+                /* 状态响应有效载荷固定 19 字节 */
+                uint8_t response[19] = {0};
                 memcpy(&response[0], &x_pos, 4);
                 memcpy(&response[4], &y_pos, 4);
                 response[8] = x_status;
                 response[9] = y_status;
-                memcpy(&response[10], &x_vel, 2);
-                memcpy(&response[12], &y_vel, 2);
-                response[14] = error_code;
+                memcpy(&response[10], &x_vel, 4);
+                memcpy(&response[14], &y_vel, 4);
+                response[18] = error_code;
 
-                usb_send_response(CMD_STATUS_RESPONSE, response, 15);
+                usb_send_response(CMD_STATUS_RESPONSE, response, 19);
             }
             break;
         

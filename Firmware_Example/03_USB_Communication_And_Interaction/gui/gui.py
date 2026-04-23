@@ -415,12 +415,12 @@ class MainWindow(QMainWindow):
         
         # X 轴速度
         layout.addWidget(QLabel("X 速度:"), 3, 0)
-        self.x_vel_label = QLabel("0 mm/s")
+        self.x_vel_label = QLabel("0.0 mm/s")
         layout.addWidget(self.x_vel_label, 3, 1, 1, 2)
         
         # Y 轴速度
         layout.addWidget(QLabel("Y 速度:"), 4, 0)
-        self.y_vel_label = QLabel("0 mm/s")
+        self.y_vel_label = QLabel("0.0 mm/s")
         layout.addWidget(self.y_vel_label, 4, 1, 1, 2)
         
         group.setLayout(layout)
