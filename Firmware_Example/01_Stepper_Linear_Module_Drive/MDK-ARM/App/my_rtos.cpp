@@ -94,13 +94,13 @@ void StartDebugTask(void *argument)
      {
       // HAL_GPIO_TogglePin(LED2_GPIO_Port, LED2_Pin);
       g_stepper[0].SetTargetVelocity(-900.0f);
-     }
+    }
      if (g_key[2].released())
-     {
+  {
       // HAL_GPIO_TogglePin(LED3_GPIO_Port, LED3_Pin);
-     }
+    }
      if (g_key[3].released()) // stop
-     {
+    {
       // HAL_GPIO_TogglePin(LED4_GPIO_Port, LED4_Pin);
       g_stepper[0].SetVelocityHard(0.0f);
      }
