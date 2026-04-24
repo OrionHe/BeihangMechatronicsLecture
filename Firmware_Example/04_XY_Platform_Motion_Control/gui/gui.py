@@ -58,8 +58,8 @@ class XYPlotCanvas(FigureCanvas):
         self.ax.set_title('XY Real-time Position')
         
         # 初始化
-        self.ax.set_xlim(-10, 110)
-        self.ax.set_ylim(-10, 110)
+        self.ax.set_xlim(-10, 300)
+        self.ax.set_ylim(-10, 300)
         # 强制 X/Y 等比例显示，避免窗口拉伸导致轨迹形变
         self.ax.set_aspect('equal', adjustable='box')
         
@@ -619,7 +619,7 @@ class MainWindow(QMainWindow):
         query_btn.clicked.connect(self.on_query_status)
         button_layout.addWidget(query_btn)
         
-        self.auto_query_check = QCheckBox("自动查询 (0.2s)")
+        self.auto_query_check = QCheckBox("自动查询 (0.05s)")
         self.auto_query_check.toggled.connect(self.on_auto_query_toggled)
         button_layout.addWidget(self.auto_query_check)
         

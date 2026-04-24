@@ -58,9 +58,10 @@ class XYPlotCanvas(FigureCanvas):
         self.ax.set_title('XY Platform Real-time Position')
         
         # 初始化
-        self.ax.set_xlim(-5, 405)
-        self.ax.set_ylim(-5, 405)
+        self.ax.set_xlim(-10, 300)
+        self.ax.set_ylim(-10, 300)
         self.ax.set_aspect('equal', adjustable='box')
+        self._draw_workspace()
         
         # 轨迹记录
         self.trajectory_x = deque(maxlen=500)
@@ -75,6 +76,18 @@ class XYPlotCanvas(FigureCanvas):
         
         self.fig.tight_layout()
         self.draw_idle()
+
+    def _draw_workspace(self):
+        """绘制 300 mm x 300 mm 工作框"""
+        rect = patches.Rectangle(
+            (0, 0), 300, 300,
+            fill=False,
+            edgecolor='black',
+            linewidth=1.5,
+            linestyle='--',
+            alpha=0.7
+        )
+        self.ax.add_patch(rect)
     
     def update_current_position(self, x: float, y: float):
         """更新当前位置"""

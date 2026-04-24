@@ -1,308 +1,244 @@
-# GUI 架构设计说明
+# 直线模组 GUI 架构说明
 
-## 设计目标
+本文档描述 `Firmware_Example/03_USB_Communication_And_Interaction/gui` 当前源码对应的实际上位机架构。
 
-- ✓ 支持两个独立直线模组 (XY 轴) 的控制
-- ✓ 实时显示位置和速度信息
-- ✓ 绘制运动轨迹，便于验证运动规划
-- ✓ 易于扩展到三轴或更多轴
+## 目录结构
 
-## 架构概览
-
+```text
+gui/
+├── main.py             # 启动入口，补充 sys.path 后调用 gui.main()
+├── gui.py              # PyQt5 主窗口、图表和交互逻辑
+├── protocol.py         # 协议枚举、帧封装和响应解析
+├── usb_comm.py         # USB CDC 串口通信与后台接收线程
+├── requirements.txt    # Python 依赖
+├── README.md           # 使用说明
+├── QUICKSTART.md       # 快速上手
+└── ARCHITECTURE.md     # 本文档
 ```
-┌─────────────────────────────────────────────────────┐
-│                   GUI 主窗口 (MainWindow)            │
-├─────────────────┬───────────────────────────────────┤
-│  左侧控制面板   │     右侧图表和日志面板             │
-│  ┌──────────┐   │  ┌──────────────────────────┐    │
-│  │连接控制  │   │  │  XY 轨迹图 (pyplot)     │    │
-│  ├──────────┤   │  │  • 当前位置 (红点)      │    │
-│  │状态显示  │   │  │  • 历史轨迹 (蓝线)      │    │
-│  ├──────────┤   │  └──────────────────────────┘    │
-│  │基础控制  │   │  ┌──────────────────────────┐    │
-│  │（全軸）  │   │  │     操作日志 QTextEdit   │    │
-│  ├──────────┤   │  │  • [HH:MM:SS] 操作记录   │    │
-│  │X轴控制   │   │  │  • [HH:MM:SS] 状态更新   │    │
-│  │Y轴控制   │   │  └──────────────────────────┘    │
-│  └──────────┘   │                                   │
-└─────────────────┴───────────────────────────────────┘
+
+运行时还可能出现 `__pycache__/`，属于 Python 生成物，不属于架构的一部分。
+
+## 总体分层
+
+```text
+main.py
+  -> gui.main()
+      -> MainWindow
+          -> ModuleController(X/Y)
+              -> CommandBuilder
+              -> USBCommunicator
+          -> XYPlotCanvas / SpeedPlotCanvas
+          -> SignalEmitter
+
+protocol.py
+  -> CommandType / ModuleID / PlatformStatus
+  -> ProtocolFrame
+  -> CommandBuilder
+  -> ResponseParser
+
+usb_comm.py
+  -> USBCommunicator
+      -> pyserial
+      -> 后台接收线程
 ```
+
+职责上可以拆成四层：
+
+1. 启动层：`main.py` 只负责导入并启动 GUI。
+2. 界面层：`gui.py` 负责窗口布局、用户输入、图表和日志显示。
+3. 业务控制层：`ModuleController` 将单轴动作翻译成协议命令。
+4. 通信层：`protocol.py` 定义协议，`usb_comm.py` 负责串口收发和帧边界识别。
 
 ## 核心模块
 
-### 1. protocol.py - 通信协议
+### 1. `protocol.py`
 
-**责任：** 定义和处理 USB 通信帧格式
+这个文件定义了上位机与固件之间的通信协议。
 
-**核心类：**
-- `CommandType`: 命令类型枚举
-- `ModuleID`: 轴 ID (X轴=0, Y轴=1)
-- `ProtocolFrame`: 帧打包/解包
-- `CommandBuilder`: 命令构建工厂
-- `ResponseParser`: 响应数据解析
+- `CommandType`
+  - `HOME = 0x01`
+  - `MOVE_ABS = 0x02`
+  - `SET_VELOCITY = 0x03`
+  - `STOP = 0x06`
+  - `QUERY_STATUS = 0x07`
+  - `STATUS_RESPONSE = 0xF0`
+- `ModuleID`
+  - `X_AXIS = 0x00`
+  - `Y_AXIS = 0x01`
+- `PlatformStatus`
+  - `IDLE`
+  - `HOMING`
+  - `MOVING`
+  - `ERROR`
 
-**关键方法：**
+`ProtocolFrame` 负责帧打包和解包，固定格式为：
+
+```text
+[0xAA][CMD][LEN][DATA...][CHECKSUM][0xFF]
+```
+
+其中校验算法是对 `cmd`、`len` 和全部 `data` 字节做 XOR。
+
+`CommandBuilder` 提供 GUI 使用的高级接口：
+
+- `home(axis)`
+- `move_abs(axis, position, speed)`
+- `set_velocity(axis, velocity)`
+- `stop(axis=None)`，`None` 表示全部停止
+- `query_status(axis=None)`，`None` 表示查询全部轴
+
+`ResponseParser.parse_status()` 解析 19 字节状态载荷：
+
+```text
+x_pos(4B) | y_pos(4B) | x_status(1B) | y_status(1B) | x_vel(4B) | y_vel(4B) | error(1B)
+```
+
+## 2. `usb_comm.py`
+
+`USBCommunicator` 是通信唯一入口。
+
+主要职责：
+
+- 枚举串口：`list_ports()`
+- 建立连接：`connect(port)`
+- 断开连接：`disconnect()`
+- 发送数据：`send_data(data)`
+- 注册回调：`set_data_callback(callback)`
+- 后台接收：`_receive_loop()`
+
+实现特点：
+
+- 基于 `pyserial`
+- 发送和接收都通过 `Lock` 保护
+- 接收线程持续从串口读取字节流
+- 在缓冲区中查找 `0xAA ... 0xFF` 完整帧
+- 完整帧到达后，回调到 GUI 层做协议解析
+
+这里的通信层只负责“字节流到完整帧”，不负责业务语义。
+
+## 3. `gui.py`
+
+### 3.1 关键类
+
+- `SignalEmitter`
+  - `status_updated`
+  - `log_message`
+  - `error_occurred`
+  - `connected`
+- `XYPlotCanvas`
+  - 绘制 XY 位置和历史轨迹
+  - 轨迹缓存使用 `deque(maxlen=500)`
+- `SpeedPlotCanvas`
+  - 绘制 X/Y 两轴速度曲线
+  - 曲线缓存使用 `deque(maxlen=300)`
+- `ModuleController`
+  - 每个轴一个实例
+  - 封装 `home / move_abs / set_velocity / stop`
+  - 统一处理“未连接”“发送成功/失败”的日志与错误提示
+- `MainWindow`
+  - 创建整个 UI
+  - 持有 `USBCommunicator`
+  - 持有两个 `ModuleController`
+  - 定时查询状态并驱动界面刷新
+
+### 3.2 UI 结构
+
+主窗口使用横向 `QSplitter` 分成左右两栏。
+
+左侧控制区：
+
+- 连接组
+  - 串口下拉框
+  - 刷新按钮
+  - 连接/断开按钮
+- 状态组
+  - 连接指示灯
+  - X/Y 位置
+  - X/Y 速度
+  - X/Y 状态
+- 基础控制组
+  - 全部回零
+  - 全部停止
+  - 清除轨迹
+- 单轴控制组
+  - X 轴控制
+  - Y 轴控制
+  - 每组包含回零、停止、目标位置、速度、移动、设置速度
+
+右侧信息区：
+
+- `XYPlotCanvas`
+- `SpeedPlotCanvas`
+- 日志面板
+
+右侧内部再通过纵向 `QSplitter` 划分图表和日志。
+
+### 3.3 定时机制
+
+`MainWindow` 中定义：
+
 ```python
-CommandBuilder.home(ModuleID.X_AXIS)           # 生成回零命令
-CommandBuilder.move_abs(ModuleID.X_AXIS, 50, 1000)  # 生成移动命令
-ProtocolFrame.pack(cmd, data)                  # 打包为字节序列
-ProtocolFrame.unpack(frame_data)               # 解包字节序列
-ResponseParser.parse_status(data)              # 解析设备状态
+STATUS_QUERY_INTERVAL_MS = 100
 ```
 
-**帧格式：**
-```
-Byte 0     |  Byte 1    |  Byte 2  |  Byte 3..N-2  |  Byte N-1  |  Byte N
-───────────┼────────────┼──────────┼───────────────┼────────────┼──────────
-0xAA       |  CMD       |  LEN     |  DATA[LEN]    |  CHECKSUM  |  0xFF
-(header)   |  (命令)    | (长度)   |  (数据)       |  (XOR)     | (tail)
-```
-
-### 2. usb_comm.py - USB 连接管理
-
-**责任：** 管理 USB CDC 虚拟串口的连接和数据传输
-
-**核心类：**
-- `USBCommunicator`: 串口通信封装
-
-**关键方法：**
-```python
-comm = USBCommunicator(baudrate=115200)
-comm.list_ports()                              # 列举 USB 设备
-comm.connect(port)                             # 连接
-comm.send_data(cmd_bytes)                      # 发送
-comm.set_data_callback(callback)               # 设置接收回调
-```
-
-**特点：**
-- 后台接收线程，不阻塞 UI
-- 自动帧同步 (找 0xAA 头开始)
-- 线程安全的发送和接收
-
-### 3. gui.py - 主程序
-
-**责任：** 构建 UI、协调控制和通信
-
-**核心类：**
-
-#### SignalEmitter
-- PyQt5 信号发射器
-- 线程间安全通信
-- 信号类型：
-  - `status_updated`: 设备状态更新
-  - `log_message`: 日志消息
-  - `error_occurred`: 错误报告
-  - `connected`: 连接状态变化
-
-#### XYPlotCanvas
-- Matplotlib 图表嵌入 PyQt5
-- 功能：
-  - 绘制 XY 工作区域背景
-  - 实时绘制当前位置 (红点)
-  - 绘制历史轨迹 (蓝线)
-  - 支持清除轨迹
-
-#### ModuleController
-- 单个轴的控制器
-- 封装轴特定命令
-- 管理轴的状态
-
-```python
-class ModuleController:
-    home()                          # 回零
-    move_abs(pos, speed)            # 绝对位移
-    set_velocity(velocity)          # 设置速度
-    stop()                          # 停止
-```
-
-#### MainWindow
-- 主 UI 窗口
-- 创建和管理所有控制组件
-
-**关键信号-槽连接：**
-```python
-# USB 数据接收
-comm.set_data_callback(self.on_usb_data_received)
-  ↓
-ProtocolFrame.unpack()
-  ↓
-signal_emitter.status_updated
-  ↓
-on_status_updated()
-  ↓
-更新标签和图表
-```
-
-**定时器：**
-- `status_timer`: 每 100ms 查询一次设备状态
+连接成功后启动 `QTimer`，每 100 ms 发送一次 `query_status()`。
 
 ## 数据流
 
-### 命令发送流程
-```
-UI 按钮点击
-  ↓
-ModuleController.move_abs(pos, speed)
-  ↓
-CommandBuilder.move_abs()
-  ↓
-ProtocolFrame.pack()
-  ↓
-USBCommunicator.send_data()
-  ↓
-设备接收
+### 命令发送链路
+
+```text
+用户点击按钮
+  -> MainWindow / ModuleController
+  -> CommandBuilder 生成命令帧
+  -> USBCommunicator.send_data()
+  -> 串口发送到下位机
 ```
 
-### 状态接收流程
+### 状态接收链路
+
+```text
+下位机返回状态帧
+  -> USBCommunicator._receive_loop()
+  -> on_usb_data_received(frame)
+  -> ProtocolFrame.unpack()
+  -> ResponseParser.parse_status()
+  -> SignalEmitter.status_updated.emit()
+  -> MainWindow.on_status_updated()
+  -> 刷新标签、XY 轨迹图、速度曲线
 ```
-定时器 (100ms)
-  ↓
-MainWindow.on_query_status()
-  ↓
-CommandBuilder.query_status()
-  ↓
-USBCommunicator.send_data()
-  ↓
-设备返回状态响应
-  ↓
-后台接收线程
-  ↓
-ProtocolFrame.unpack()
-  ↓
-signal_emitter.status_updated.emit()
-  ↓
-MainWindow.on_status_updated()
-  ↓
-更新 UI 标签: x_pos_label, y_pos_label, ...
-  ↓
-XYPlotCanvas.update_current_position()
-  ↓
-绘制新位置点和轨迹
-```
-
-## UI 布局
-
-### 左侧控制面板 (1/3 宽度)
-1. **连接** (QGroupBox)
-   - 端口选择下拉框
-   - 刷新按钮
-   - 连接/断开按钮
-
-2. **状态** (QGroupBox)
-   - 连接指示灯 (●)
-   - X/Y 位置显示
-   - X/Y 速度显示
-
-3. **基础控制** (QGroupBox)
-   - 全部回零 (橙色)
-   - 全部停止 (红色)
-   - 清除轨迹
-
-4. **X轴/Y轴控制** (可滚动)
-   - 回零按钮
-   - 停止按钮
-   - 目标位置输入 (mm)
-   - 速度输入 (pulse/s)
-   - 移动按钮
-   - 设置速度按钮
-
-### 右侧信息面板 (2/3 宽度)
-1. **XY 轨迹图**
-   - Matplotlib 图表
-   - 显示范围: -5~105 mm (可配置)
-   - 等比例显示 (1:1)
-
-2. **操作日志**
-   - 只读 QTextEdit
-   - 带时间戳
-   - 自动滚动到最新
-
-## 扩展指南
-
-### 添加第三个轴 (Z轴)
-
-1. 在 `protocol.py` 更新 `ModuleID`：
-```python
-class ModuleID(IntEnum):
-    X_AXIS = 0x00
-    Y_AXIS = 0x01
-    Z_AXIS = 0x02  # 新增
-```
-
-2. 在 `gui.py` 初始化控制器：
-```python
-self.controller_z = ModuleController(ModuleID.Z_AXIS, "Z轴", self.comm, self.signal_emitter)
-```
-
-3. 在 `create_control_panel()` 添加控制组：
-```python
-motion_layout.addWidget(self.create_axis_control_group("Z轴", self.controller_z, "z"))
-```
-
-### 修改 UI 配色
-编辑 `apply_theme()` 中的 QSS 样式表
-
-### 更改图表范围
-修改 `XYPlotCanvas.__init__()` 中的 `set_xlim()` 和 `set_ylim()`
-
-## 依赖关系
-
-```
-gui.py
-  ├── PyQt5 (UI 框架)
-  ├── matplotlib (图表绘制)
-  ├── protocol.py (通信协议)
-  │   └── struct, enum (标准库)
-  └── usb_comm.py (USB 通信)
-      └── pyserial (串口驱动)
-```
-
-## 性能考虑
-
-1. **状态查询间隔**：100ms
-   - 可在代码中修改 `STATUS_QUERY_INTERVAL_MS`
-   - 过短会增加 USB 负荷，过长会降低响应性
-
-2. **轨迹历史长度**：最大 500 点
-   - deque 中配置 `maxlen=500`
-   - 自动丢弃最旧的点
-
-3. **日志输出**：无限制
-   - 可能导致内存占用增加
-   - 建议每个会话清空或定期重启
 
 ## 线程模型
 
-```
-主线程 (PyQt5 事件循环)
-  ├── UI 事件处理 (同步)
-  ├── 定时器 (status_timer)
-  └── 信号-槽机制
+界面线程：
 
-后台线程 (USBCommunicator._receive_loop)
-  └── 串口接收 (异步)
-      └── 帧同步和回调
-          └── signal_emitter.status_updated.emit()
-              └── 回到主线程处理
-```
+- Qt 事件循环
+- 所有控件更新
+- 定时状态查询
 
-## 一致性和错误处理
+后台线程：
 
-- **通信错误**：显示在日志中，不中断 UI
-- **解析错误**：捕获异常，记录错误信息
-- **连接丢失**：状态指示灯变红，按钮禁用
-- **命令失败**：用户得到即时反馈
+- `USBCommunicator._receive_loop()`
+- 只做串口读取和帧切分
 
-## 测试建议
+线程间协作方式：
 
-1. **连接测试**：验证端口扫描和连接
-2. **通信测试**：发送各类命令，检查响应
-3. **轨迹测试**：绘制简单图形 (正方形、圆形等)，验证位置准确性
-4. **压力测试**：快速发送多个命令，检查队列处理
+- 接收线程通过数据回调把完整帧交回 GUI
+- GUI 再通过 `SignalEmitter` 把状态更新切回 Qt 主线程
 
-## 已知限制
+## 当前实现的架构特点
 
-- 假设单一设备连接 (多设备需要重新设计)
-- 硬编码 X/Y 两个轴 (第三轴需要代码修改)
-- 暂无命令历史或脚本录制功能
-- 不支持设备功能发现 (固定协议)
+- 双轴控制是通过两个 `ModuleController` 实例实现的，而不是更通用的设备列表。
+- 协议层支持“按轴发送命令”和“查询全部轴状态”。
+- 界面同时提供位置轨迹图和速度趋势图，旧文档里只描述轨迹图是不完整的。
+- 轨迹图显示范围当前固定为 `-10 ~ 310 mm`，并绘制 `300 mm x 300 mm` 工作框。
+- 单轴目标位置输入范围是 `-100 ~ 300 mm`，速度输入范围是 `0.0 ~ 10.0 mm/s`。
+
+## 可扩展点
+
+如果要增加新轴或新命令，主要落点如下：
+
+1. 在 `protocol.py` 扩展 `ModuleID` 或 `CommandType`。
+2. 在 `CommandBuilder` 和 `ResponseParser` 补充打包/解析逻辑。
+3. 在 `gui.py` 中新增控制器实例和对应面板。
+4. 如涉及新的状态字段，还需要同步扩展状态显示和图表逻辑。
