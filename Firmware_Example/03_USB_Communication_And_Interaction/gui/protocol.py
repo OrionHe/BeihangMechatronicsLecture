@@ -106,7 +106,7 @@ class CommandBuilder:
         return ProtocolFrame().pack(CommandType.HOME, data)
     
     @staticmethod
-    def move_abs(axis: ModuleID, position: float, speed: int) -> bytes:
+    def move_abs(axis: ModuleID, position: float, speed: float) -> bytes:
         """构建绝对位移命令
         
         Args:
@@ -114,18 +114,18 @@ class CommandBuilder:
             position: 目标位置 (mm)
             speed: 速度 (mm/s)
         """
-        data = bytes([axis]) + struct.pack('<fH', position, int(round(speed)))
+        data = bytes([axis]) + struct.pack('<ff', float(position), float(speed))
         return ProtocolFrame().pack(CommandType.MOVE_ABS, data)
     
     @staticmethod
-    def set_velocity(axis: ModuleID, velocity: int) -> bytes:
+    def set_velocity(axis: ModuleID, velocity: float) -> bytes:
         """构建设置速度命令
         
         Args:
             axis: 轴ID
             velocity: 速度 (mm/s)
         """
-        data = bytes([axis]) + struct.pack('<H', int(round(velocity)))
+        data = bytes([axis]) + struct.pack('<f', float(velocity))
         return ProtocolFrame().pack(CommandType.SET_VELOCITY, data)
     
     @staticmethod

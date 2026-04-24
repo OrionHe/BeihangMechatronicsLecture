@@ -32,6 +32,10 @@ from usb_comm import USBCommunicator
 logger = logging.getLogger(__name__)
 
 STATUS_QUERY_INTERVAL_MS = 100
+SPEED_PLOT_Y_MIN = -15
+SPEED_PLOT_Y_MAX = 15
+SPEED_INPUT_MIN = -10.0
+SPEED_INPUT_MAX = 10.0
 
 
 class SignalEmitter(QObject):
@@ -79,15 +83,19 @@ class XYPlotCanvas(FigureCanvas):
 
     def _draw_workspace(self):
         """绘制 300 mm x 300 mm 工作框"""
-        rect = patches.Rectangle(
-            (0, 0), 300, 300,
-            fill=False,
-            edgecolor='black',
-            linewidth=1.5,
-            linestyle='--',
-            alpha=0.7
-        )
-        self.ax.add_patch(rect)
+        # rect = patches.Rectangle(
+        #     (0, 0), 300, 300,
+        #     fill=False,
+        #     edgecolor='black',
+        #     linewidth=1.5,
+        #     linestyle='--',
+        #     alpha=0.7
+        # )
+        # self.ax.add_patch(rect)
+        for spine in self.ax.spines.values():
+            spine.set_visible(True)
+            spine.set_color('black')
+            spine.set_linewidth(1.2)
     
     def update_current_position(self, x: float, y: float):
         """更新当前位置"""
@@ -132,6 +140,7 @@ class SpeedPlotCanvas(FigureCanvas):
         self.x_line, = self.ax.plot([], [], color='tab:blue', linewidth=1.5, label='X Speed')
         self.y_line, = self.ax.plot([], [], color='tab:orange', linewidth=1.5, label='Y Speed')
         self.ax.legend(loc='upper right')
+        self.ax.set_ylim(SPEED_PLOT_Y_MIN, SPEED_PLOT_Y_MAX)
 
         self.fig.tight_layout()
         self.draw_idle()
@@ -152,12 +161,7 @@ class SpeedPlotCanvas(FigureCanvas):
         else:
             self.ax.set_xlim(max(0, self.sample_index - 100), self.sample_index + 5)
 
-        all_values = list(self.speed_x) + list(self.speed_y)
-        if all_values:
-            min_speed = min(all_values)
-            max_speed = max(all_values)
-            margin = max(20.0, (max_speed - min_speed) * 0.2)
-            self.ax.set_ylim(min_speed - margin, max_speed + margin)
+        self.ax.set_ylim(SPEED_PLOT_Y_MIN, SPEED_PLOT_Y_MAX)
 
         self.draw_idle()
 
@@ -171,7 +175,7 @@ class SpeedPlotCanvas(FigureCanvas):
         self.x_line.set_data([], [])
         self.y_line.set_data([], [])
         self.ax.set_xlim(0, 5)
-        self.ax.set_ylim(-10, 10)
+        self.ax.set_ylim(SPEED_PLOT_Y_MIN, SPEED_PLOT_Y_MAX)
         self.draw_idle()
 
 
@@ -205,7 +209,7 @@ class ModuleController:
         """回零"""
         return self.send_command(CommandBuilder.home(self.axis_id), "回零")
     
-    def move_abs(self, position: float, speed: int) -> bool:
+    def move_abs(self, position: float, speed: float) -> bool:
         """绝对位移"""
         return self.send_command(
             CommandBuilder.move_abs(self.axis_id, position, speed),
@@ -513,7 +517,7 @@ class MainWindow(QMainWindow):
         # 速度
         layout.addWidget(QLabel("速度 (mm/s):"), 2, 0)
         speed_spinbox = QDoubleSpinBox()
-        speed_spinbox.setRange(0.0, 10.0)
+        speed_spinbox.setRange(SPEED_INPUT_MIN, SPEED_INPUT_MAX)
         speed_spinbox.setValue(10)
         speed_spinbox.setSingleStep(0.1)
         speed_spinbox.setDecimals(1)

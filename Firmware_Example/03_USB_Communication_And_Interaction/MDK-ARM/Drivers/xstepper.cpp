@@ -93,28 +93,29 @@ namespace xstepper
     {
       __HAL_TIM_SET_AUTORELOAD(this->p_htim, 999);
       __HAL_TIM_SET_COMPARE(this->p_htim, this->channel, 0);
-      //HAL_TIM_PWM_Stop_IT(this->p_htim, this->channel);
+      // HAL_TIM_PWM_Stop_IT(this->p_htim, this->channel);
       this->is_running = false;
       return;
     }
-    uint32_t arr = (this->tim_freq / pwm_freq);
-    if (arr == 0)
+    uint32_t period_ticks = (this->tim_freq + pwm_freq / 2U) / pwm_freq;
+    if (period_ticks == 0)
     {
-      arr = 1;
+      period_ticks = 1;
     }
-    --arr;
+    uint32_t arr = period_ticks - 1U;
     if (arr > 0xFFFF)
     {
       __HAL_TIM_SET_AUTORELOAD(this->p_htim, 0xFFFF);
       __HAL_TIM_SET_COMPARE(this->p_htim, this->channel, 0x7FFF);
-      __HAL_TIM_SET_COUNTER(this->p_htim, 0);
-      HAL_TIM_PWM_Start_IT(this->p_htim, this->channel);
-      this->is_running = true;
     }
     else
     {
       __HAL_TIM_SET_AUTORELOAD(this->p_htim, arr);
       __HAL_TIM_SET_COMPARE(this->p_htim, this->channel, (arr + 1) / 2);
+    }
+
+    if (!this->is_running)
+    {
       __HAL_TIM_SET_COUNTER(this->p_htim, 0);
       HAL_TIM_PWM_Start_IT(this->p_htim, this->channel);
       this->is_running = true;

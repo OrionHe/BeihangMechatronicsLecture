@@ -134,8 +134,8 @@ main.py
 | 命令 | 代码 | 数据格式 | 说明 |
 |------|------|----------|------|
 | HOME | `0x01` | `axis(uint8)` | 指定轴回零 |
-| MOVE_ABS | `0x02` | `axis(uint8) position(float32) speed(uint16)` | 指定轴绝对位移 |
-| SET_VELOCITY | `0x03` | `axis(uint8) velocity(uint16)` | 设置指定轴速度 |
+| MOVE_ABS | `0x02` | `axis(uint8) position(float32) speed(float32)` | 指定轴绝对位移 |
+| SET_VELOCITY | `0x03` | `axis(uint8) velocity(float32)` | 设置指定轴速度 |
 | STOP | `0x06` | `axis(uint8)` | 停止指定轴 |
 | QUERY_STATUS | `0x07` | `axis(uint8)` | 查询指定轴或全部轴状态 |
 | STATUS_RESPONSE | `0xF0` | 见 4.4 | 下位机状态响应 |

@@ -162,36 +162,36 @@ void usb_handle_command(uint8_t cmd, uint8_t *data, uint8_t data_len)
             break;
         
         case CMD_MOVE_ABS:
-            /* [axis_id][position(float)][speed(uint16)] */
-            if (data_len >= 7U) {
+            /* [axis_id][position(float)][speed(float)] */
+            if (data_len >= 9U) {
                 float position = 0.0f;
-                uint16_t speed = 0U;
+                float speed = 0.0f;
                 memcpy(&position, &data[1], 4);
-                memcpy(&speed, &data[5], 2);
+                memcpy(&speed, &data[5], 4);
 
                 if (axis_id == AXIS_X) {
                     g_linearModule[0].SetMode(x_linear_module::MODULE_MODE_POSITION);
-                    g_linearModule[0].SetTargetPositionWithVelocity(position, (float)speed);
+                    g_linearModule[0].SetTargetPositionWithVelocity(position, speed);
                 } else if (axis_id == AXIS_Y) {
                     g_linearModule[1].SetMode(x_linear_module::MODULE_MODE_POSITION);
-                    g_linearModule[1].SetTargetPositionWithVelocity(position, (float)speed);
+                    g_linearModule[1].SetTargetPositionWithVelocity(position, speed);
                 }
                 set_homing_flag(axis_id, false);
             }
             break;
         
         case CMD_SET_VELOCITY:
-            /* [axis_id][velocity(uint16)] */
-            if (data_len >= 3U) {
-                uint16_t velocity = 0U;
-                memcpy(&velocity, &data[1], 2);
+            /* [axis_id][velocity(float)] */
+            if (data_len >= 5U) {
+                float velocity = 0.0f;
+                memcpy(&velocity, &data[1], 4);
 
                 if (axis_id == AXIS_X) {
                     g_linearModule[0].SetMode(x_linear_module::MODULE_MODE_VELOCITY);
-                    g_linearModule[0].SetTargetVelocity((float)velocity);
+                    g_linearModule[0].SetTargetVelocity(velocity);
                 } else if (axis_id == AXIS_Y) {
                     g_linearModule[1].SetMode(x_linear_module::MODULE_MODE_VELOCITY);
-                    g_linearModule[1].SetTargetVelocity((float)velocity);
+                    g_linearModule[1].SetTargetVelocity(velocity);
                 }
                 set_homing_flag(axis_id, false);
             }

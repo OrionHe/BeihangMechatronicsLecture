@@ -21,8 +21,8 @@ typedef enum {
 
 typedef enum {
     CMD_HOME            = 0x01,   /* [axis_id] */
-    CMD_MOVE_ABS        = 0x02,   /* [axis_id][position(float,4B)][speed(uint16,2B)] */
-    CMD_SET_VELOCITY    = 0x03,   /* [axis_id][velocity(uint16,2B)] */
+    CMD_MOVE_ABS        = 0x02,   /* [axis_id][position(float,4B)][speed(float,4B)] */
+    CMD_SET_VELOCITY    = 0x03,   /* [axis_id][velocity(float,4B)] */
     CMD_STOP            = 0x06,   /* [axis_id] */
     CMD_QUERY_STATUS    = 0x07,   /* [axis_id] */
     CMD_STATUS_RESPONSE = 0xF0    /* [x_pos(4B)][y_pos(4B)][x_status(1B)][y_status(1B)][x_vel_mm_s(float,4B)][y_vel_mm_s(float,4B)][error(1B)] */

@@ -32,6 +32,10 @@ from usb_comm import USBCommunicator
 logger = logging.getLogger(__name__)
 
 STATUS_QUERY_INTERVAL_MS = 50
+PLOT_X_MIN = -10
+PLOT_X_MAX = 300
+PLOT_Y_MIN = -10
+PLOT_Y_MAX = 300
 
 
 class SignalEmitter(QObject):
@@ -58,8 +62,7 @@ class XYPlotCanvas(FigureCanvas):
         self.ax.set_title('XY Real-time Position')
         
         # 初始化
-        self.ax.set_xlim(-10, 300)
-        self.ax.set_ylim(-10, 300)
+        self._apply_plot_bounds()
         # 强制 X/Y 等比例显示，避免窗口拉伸导致轨迹形变
         self.ax.set_aspect('equal', adjustable='box')
         
@@ -82,11 +85,29 @@ class XYPlotCanvas(FigureCanvas):
         
         self.fig.tight_layout()
         self.draw_idle()
+
+    def _apply_plot_bounds(self):
+        """统一固定 XY 位置图范围为 (-10, 300) * (-10, 300)。"""
+        self.ax.set_xlim(PLOT_X_MIN, PLOT_X_MAX)
+        self.ax.set_ylim(PLOT_Y_MIN, PLOT_Y_MAX)
     
     def _draw_workspace(self):
         """绘制工作区域"""
-        rect = patches.Rectangle((0, 0), 100, 100, fill=False, edgecolor='black', linewidth=1.5, linestyle='--', alpha=0.7)
-        self.ax.add_patch(rect)
+        # rect = patches.Rectangle(
+        #     (PLOT_X_MIN, PLOT_Y_MIN),
+        #     PLOT_X_MAX - PLOT_X_MIN,
+        #     PLOT_Y_MAX - PLOT_Y_MIN,
+        #     fill=False,
+        #     edgecolor='black',
+        #     linewidth=1.5,
+        #     linestyle='--',
+        #     alpha=0.7
+        # )
+        # self.ax.add_patch(rect)
+        for spine in self.ax.spines.values():
+            spine.set_visible(True)
+            spine.set_color('black')
+            spine.set_linewidth(1.2)
     
     def update_current_position(self, x: float, y: float):
         """更新当前位置"""
@@ -98,11 +119,13 @@ class XYPlotCanvas(FigureCanvas):
             self.trajectory_y.append(y)
             self.trajectory_line.set_data(list(self.trajectory_x), list(self.trajectory_y))
         
+        self._apply_plot_bounds()
         self.draw_idle()
     
     def set_target_position(self, x: float, y: float):
         """更新目标位置"""
         self.target_point.set_data([x], [y])
+        self._apply_plot_bounds()
         self.draw_idle()
     
     def clear_trajectory(self):
@@ -110,6 +133,7 @@ class XYPlotCanvas(FigureCanvas):
         self.trajectory_x.clear()
         self.trajectory_y.clear()
         self.trajectory_line.set_data([], [])
+        self._apply_plot_bounds()
         self.draw_idle()
 
 
