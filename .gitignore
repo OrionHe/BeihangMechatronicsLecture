@@ -46,7 +46,6 @@ Hardware/Tutorial\ Board/__Previews/
 
 # Build files
 # define exception below if needed
-*.bat
 *._ia
 *.__i
 *._ii
